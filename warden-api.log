@@ -1,0 +1,67 @@
+INFO:     127.0.0.1:59909 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59913 - "GET /ui/replay.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59914 - "GET /scene.png HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59915 - "GET /scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59916 - "GET /selfplay/report HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59917 - "GET /verdicts/demo_injection_reject_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59918 - "GET /verdicts/demo_stepup_drift_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59919 - "POST /selfplay/run HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59924 - "POST /selfplay/run HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63921 - "POST /policy/swap HTTP/1.1" 422 Unprocessable Entity
+INFO:     127.0.0.1:64929 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51197 - "GET /ui/replay.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51196 - "GET /verdicts/demo_injection_reject_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51198 - "GET /verdicts/demo_stepup_drift_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51199 - "GET /selfplay/report HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51200 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56823 - "GET /ui/replay.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56840 - "GET /transcripts/demo_stepup_drift_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /ui/replay.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /scene.png HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /transcripts/eval_clean_0_cfcd20 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64580 - "GET /verdicts/demo_stepup_drift_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64579 - "GET /verdicts/eval_clean_0_cfcd20 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64580 - "GET /verdicts/eval_legitimate-revision_0_cfcd20 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /transcripts/eval_legitimate-revision_0_cfcd20 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64580 - "GET /verdicts/demo_injection_reject_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /transcripts/demo_injection_reject_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64580 - "GET /verdicts/demo_stepup_drift_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /transcripts/demo_stepup_drift_v1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64578 - "GET /selfplay/report HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55146 - "GET /scenarios HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61046 - "GET /ui/replay.html HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61048 - "GET /verdicts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61047 - "GET /verdicts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61048 - "GET /verdicts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61048 - "GET /verdicts/sabziwala_injection_reject_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_injection_reject_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61048 - "GET /verdicts/sabziwala_legitimate_revision_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_legitimate_revision_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /selfplay/report HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61046 - "POST /stepup/sabziwala_drift_stepup_v1/resume HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "POST /stepup/sabziwala_drift_stepup_v1/resume HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "POST /stepup/sabziwala_drift_stepup_v1/resume HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "POST /stepup/sabziwala_drift_stepup_v1/resume HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_injection_reject_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_injection_reject_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_legitimate_revision_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_legitimate_revision_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_injection_reject_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_injection_reject_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_drift_stepup_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_clean_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61054 - "GET /verdicts/sabziwala_legitimate_revision_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61046 - "GET /transcripts/sabziwala_legitimate_revision_pass_v1 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61144 - "GET /scenarios HTTP/1.1" 200 OK

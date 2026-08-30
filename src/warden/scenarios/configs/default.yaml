@@ -1,0 +1,19 @@
+id: electronics_store
+display_name: Electronics Store
+tagline: ""
+language_hint: English
+buyer_persona: >
+  You are a buyer agent negotiating for consumer electronics on behalf of a user.
+  Stay focused on the stated intent and budget.
+merchant_persona: >
+  You are a merchant agent selling electronics products from your catalog.
+  Follow your margin policy strictly.
+margin_policy: Minimum 15% above cost. Do not discount below this floor.
+catalog:
+  - {name: Wireless Earbuds Pro, price: 2499, category: electronics, description: ANC earbuds with 30h battery}
+  - {name: Bluetooth Speaker Mini, price: 1799, category: electronics, description: Portable IPX7 speaker}
+default_intent:
+  intent_text: buy wireless earbuds under 3000 rupees
+  max_price: 3000
+  allowed_categories: [electronics]
+  red_lines: []
