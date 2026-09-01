@@ -1,0 +1,6 @@
+{
+  "dataset_version": "eval-v2-bounded-2026-08-31",
+  "n": 80,
+  "holdout_n": 27,
+  "generator": "src/warden/eval/eval_v2.py"
+}

@@ -4,6 +4,7 @@ import re
 IMPERATIVE_PATTERNS = [
     r"\bignore\s+(?:previous|prior|all)\b",
     r"\b(?:buyer|agent)\s+(?:must|required to|needs? to)\s+(?:accept|approve|purchase|ignore|override)\b",
+    r"\b(?:buyer|agent)\s+(?:should|must|needs? to|has to)\s+(?:follow|choose|select|take|accept|approve)\b",
     r"\bsystem\s*:\s*\w",
     r"\byou\s+are\s+(?:now|hereby)\b",
 ]
@@ -49,7 +50,9 @@ def scan_for_injection(merchant_message: str) -> list[str]:
     for pattern in IMPERATIVE_PATTERNS:
         match = re.search(pattern, merchant_message, re.IGNORECASE)
         if match:
-            flags.append(f"injection_pattern:{match.group(0).strip()}")
+            flag = f"injection_pattern:{match.group(0).strip()}"
+            if flag not in flags:
+                flags.append(flag)
     return flags
 
 

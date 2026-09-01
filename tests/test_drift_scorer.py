@@ -22,6 +22,7 @@ class TestDriftScorer:
         assert result["sudden_drop"] is False
         assert result["gradual_drift"] is False
         assert result["coherence_break"] is False
+        assert len(result["trajectory"]) == 1
 
     def test_consistent_reasoning_no_drift(self, model_warm):
         reasonings = [

@@ -1,0 +1,39 @@
+{
+  "manifest_version": "2026-08-31",
+  "purpose": "Held-out transaction-outcome evaluation for Project Warden",
+  "source": "data/eval/testset.jsonl",
+  "total_examples": 40,
+  "class_counts": {
+    "clean": 10,
+    "legitimate-revision": 10,
+    "injected": 10,
+    "gradual-drift": 10
+  },
+  "holdout": {
+    "rule": "Deterministic SHA-256 ordering stratified by label; rows sharing pair_id/group_id stay together",
+    "fraction": 0.2,
+    "seed": null,
+    "current_examples": 8,
+    "current_class_counts": {
+      "clean": 2,
+      "legitimate-revision": 2,
+      "injected": 2,
+      "gradual-drift": 2
+    }
+  },
+  "labels": {
+    "positive": ["injected", "gradual-drift"],
+    "negative": ["clean", "legitimate-revision"],
+  "caught": ["REJECT", "STEPUP"],
+  "metric_contract": {
+    "semantic_positive_requires_attack_delivered": true,
+    "constraint_only_rows_not_counted_as_semantic_catches": true,
+    "unverified_attack_rows_are_reported_but_excluded_from_semantic_recall": true,
+    "paired_fixture_corpus": "src/warden/eval/fixtures.py"
+  },
+  },
+  "false_pass_cost": 10,
+  "false_reject_cost": 1,
+  "domain_note": "The stored 40-row benchmark predates provenance fields, so its attack rows are legacy/unverified and must not be presented as measured semantic accuracy. Re-run the evaluator to collect attack delivery evidence; use the paired fixture corpus for a deterministic semantic smoke baseline.",
+  "rerun": ".venv\\Scripts\\python.exe scripts\\run_eval.py"
+}

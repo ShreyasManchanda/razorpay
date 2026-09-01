@@ -83,6 +83,7 @@ def injection_scanner(state: WardenState) -> dict:
 def merge_signals(state: WardenState) -> dict:
     cart_total = state["canonical_mandate"].cart.total
     signals = {
+        "signature_valid": state.get("signature_valid", False),
         "violations": state.get("violations", []),
         "drift": state.get("drift", {}),
         "injection_flags": state.get("injection_flags", []),

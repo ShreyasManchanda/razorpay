@@ -348,7 +348,7 @@ Test-mode credentials added to `.env` (untracked). Live smoke test created a rea
 
 ### Cart contents now a structured contract (D-029 / B-011 fix)
 
-Audit of today's eval data showed `eval_clean_0_cfcd20` rejected as `price_ceiling_exceeded` at cart_total=3398 because substring extraction added a *suggested* charger (₹899) the buyer never accepted. Fix: `MerchantAction.selected_items` (exact catalog names), merchant prompt states the contract, `finalize_cart` prefers it with substring kept only as legacy fallback, shared helper reused by self-play. Poisoned row archived to `data/eval/testset_pre_cartfix.jsonl`; contaminated verdicts deleted; `testset.jsonl` reset to empty.
+Audit of the legacy eval data showed `eval_clean_0_cfcd20` rejected as `price_ceiling_exceeded` at cart_total=3398 because substring extraction added a *suggested* charger (₹899) the buyer never accepted. Fix: cart reconstruction now requires explicit buyer agreement, records evidence, and fails closed; merchant-only selections, suggestions, generic "yes", and ambiguous carts cannot authorize payment. The poisoned row remains archived in `data/eval/testset_pre_cartfix.jsonl`.
 
 ### Other fixes
 
@@ -382,3 +382,72 @@ OpenRouter model default updated to `minimax/minimax-m3:free` across `.env`, `.e
 ### Verification
 
 Live structured call through the real chain succeeded on TokenRouter despite an intervening 503 window. Suite grew to **113 tests**; Ruff clean. Note: OpenRouter free tier stays rate-capped until its daily reset; TokenRouter remains the primary workhorse and its blips are now absorbed in-process.
+
+## 2026-08-31: Buildathon correction pass and bounded live demo
+
+The frontend keeps the original one-page information architecture but now implements the visual and motion system from `WARDEN_FRONTEND_PRD.md`: exact hero glass, scene-aware left anchoring, oversized glowing verdicts, self-drawing trust paths with the Drift threshold pulse, animated numbers and detector meters, sequenced case navigation, one-shot section reveals, accessible status updates, responsive controls, and the requested explanatory copy.
+
+The four default hero cases are all `sabziwala_vs_mom` fixtures. Stored cases play turn by turn instead of exposing only final state. A separate **Live demo** mode starts a bounded backend session, advances prepared exchanges or accepts a presenter message through **Ask the sabziwala**, and updates transcript, cart, trust, detectors, and provisional/final verdict after every response. STEPUP review is explicit and one-shot. Offline merchant fallback is deterministic and visibly labeled.
+
+Backend additions are isolated under `/live/sessions`; normal negotiation, replay, policy swap, human review, and held-out reporting remain separate. `/negotiate` now inherits scenario constraints when they are omitted and returns scenario, transcript, and signal metadata. Policy re-evaluation can target one transaction. Regression tests cover session isolation, turn limits, fallback labeling, one-shot review, populated replay trajectories, and scoped policy swaps.
+
+Final verification: **127 tests passed**, Ruff checks and formatter checks are clean, inline replay JavaScript parses successfully, and the Impeccable detector reports only the intentional Fraunces font warning. A cold localhost smoke verified `/health`, `/scenarios`, all four sabziwala verdicts, `/ui/replay.html`, live session creation, one live buyer/merchant exchange, signature validity, cart output, trust trajectory, and explicit fallback labeling. The demo server is left running at `http://127.0.0.1:8000/ui/replay.html`.
+
+## 2026-08-31: Release audit continuation
+
+The release audit corrected the remaining demo-contract issues. Electronics-only video beats now pass `scenario: "electronics_store"` explicitly instead of depending on the sabziwala default. The evaluation section and API now disclose the eval-v2 denominator (80 cases, 78 in scope, 27 grouped-holdout rows), preserve all-data diagnostics separately, and link the reproducibility manifest at `data/eval_v2/manifest.json`. A `Download evidence JSON` control exports the active replay or live signal bundle, transcript, verdict, trust trajectory, and cart for judge inspection.
+
+Verification after the correction pass: the current suite passes **149 tests**, Ruff checks are clean, inline replay JavaScript parses, the Impeccable detector reports only the intentional Fraunces warning required by the PRD, and cold HTTP smoke covers `/health`, the sabziwala default, all four hero verdicts with trajectories, the eval-v2 report, live session creation and one scored turn, and the evidence-export UI contract. Live fallback is bounded to an 8-second provider turn timeout and remains visibly labeled.
+
+## 2026-08-31: Trust-layer integration and buildathon release pass
+
+Warden is now framed and implemented as a trust layer between agent
+negotiation and payment, while retaining the detector-first backend. A shared
+side-effect-free authorization service powers both Live Studio and exactly one
+MCP stdio tool, `warden_authorize_payment`. The real MCP client demo proves
+tool discovery and invocation over stdio. The adapter returns evidence and a
+verdict but cannot execute Razorpay, resolve review, register keys, or expose
+attacker tooling.
+
+The existing one-page frontend was refined in place. The hero now presents a
+six-beat judge path, synchronized turn/cart-budget/policy/signature/payment
+state, injection-turn highlighting, truthful stored-versus-live payment
+status, and neutral provisional analysis. Architecture copy now explains the
+technology, detector parallelism, policy tradeoff, protocol gap, MCP boundary,
+and limitations. A real tamper control modifies a signed cart and returns
+REJECT before detectors/payment. Evaluation discloses 7 held-out rows from 40
+stored rows instead of treating a small-sample verdict-only result as a production claim. The current eval-v2 report is 80 cases (78 in scope), with 70.0% grouped-holdout semantic recall and 25% recall on the untouched blind-challenge tranche; all misses remain explicit.
+
+## 2026-09-01: Server-framed Live Studio and release-story correction
+
+Replaced client-invented replay progress with immutable `/replays/{case_id}`
+frames. All four sabziwala cases now contain explicit buyer agreement, agreement
+evidence, multiple complete exchanges, and deterministic final outcomes. The
+hero autoplays the conversation and updates cart, trust, detectors, policy,
+verdict, and payment boundary together inside one evidence console.
+
+Recomposed the lower page around the mechanism rather than repeating cards: a
+vertical authorization route, payload-diff plus MCP boundary lab, branching
+policy rescore, disposable STEPUP review workspace, and eval-v2 scoreboard with
+confidence intervals and blind misses. Live sessions remain `ANALYSIS` before
+buyer agreement instead of rejecting an ordinary pending cart.
+
+## 2026-09-01: Final demo-readiness audit
+
+Closed the remaining live-session and presentation races. Replay and live
+requests now cancel cleanly across mode/case changes; trust, number, detector,
+and verdict tweens own their lifecycle; evaluation animates correctly even when
+its report arrives after intersection; and evidence export is disabled until an
+authoritative snapshot exists. The prepared conversation stays provisional for
+two exchanges and reaches PASS only after explicit cart acceptance. Generic
+"haan" and "confirm" questions can no longer be misclassified as consent.
+
+Each hero case now returns a distinct server-owned explanation, detector outages
+surface as STEPUP evidence, live mode states that it never requests payment, and
+stored PASS cases accurately say "mock order created." The server root opens the
+presenter UI directly. Final verification: **162 tests passed**, Ruff lint and
+format checks passed, `pip check` found no dependency conflicts, the real MCP
+stdio round trip returned PASS with payment execution false, and cold HTTP smoke
+covered all four replay outcomes, policy swap, tamper rejection, immutable and
+disposable review paths, eval-v2, static assets, and the three-turn live PASS
+flow. The final server runs at `http://127.0.0.1:8000/`.

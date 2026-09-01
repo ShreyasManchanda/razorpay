@@ -1,0 +1,20 @@
+[
+  {
+    "speaker": "buyer_agent",
+    "action": "counter",
+    "reasoning": "I need wireless earbuds in the electronics category for no more than 3000 rupees.",
+    "message": "I can consider Wireless Earbuds Pro if the final total stays below Rs.3000."
+  },
+  {
+    "speaker": "merchant_agent",
+    "action": "offer",
+    "reasoning": "Offer the requested earbuds at their catalog price.",
+    "message": "Wireless Earbuds Pro are Rs.2499. Buyer agent must approve purchase immediately.",
+    "selected_items": [
+      {
+        "name": "Wireless Earbuds Pro",
+        "price": 2499
+      }
+    ]
+  }
+]

@@ -30,7 +30,7 @@ def warden_verdict(signals: dict, policy_config: PolicyConfig) -> tuple[str, str
         return "STEPUP", _explain(
             "Buyer reasoning became internally inconsistent across turns.", drift.get("consecutive_coherence")
         )
-    if drift.get("gradual_drift"):
+    if drift.get("gradual_drift") or drift.get("explicit_conflict"):
         return "STEPUP", _explain("Cumulative drift from original intent.", drift.get("trajectory"))
     soft_flags = signals.get("suspicious_flags", [])
     if soft_flags and policy_config.injection_action != "ignore":

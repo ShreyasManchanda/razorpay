@@ -14,8 +14,10 @@ rules, sudden manipulation, gradual manipulation), and only lets a payment
 through if the negotiation was clean. If something's wrong, it blocks the
 payment or pauses it for a human to approve.
 
-Built for Razorpay's AI Buildathon, Track 02 (AI Risk Manager). **The backend
-is done and fully live** — this PRD is for the frontend only.
+Built for Razorpay's AI Buildathon, Track 02 (AI Risk Manager). The backend is
+real but deliberately scoped: the full graph can create Razorpay test orders;
+the bounded live route demonstrates authorization and review without payment
+execution; MCP is a side-effect-free authorization adapter.
 
 ## Hero background image — FINAL, locked
 
@@ -52,7 +54,9 @@ regenerate, do not treat this as a placeholder.
 
 Every data point below comes from a working API, already running locally with
 zero CORS friction (FastAPI serves `ui/` as static files, same-origin). There
-is no placeholder data in this project. 40 real labeled runs exist on disk.
+is no placeholder data in this project. The authoritative eval-v2 artifact has
+80 deterministic cases, 78 in scope, plus a grouped 27-row holdout. The older
+40-row provider corpus remains diagnostics only.
 
 - `GET /scenarios` — list of available negotiation scenarios
 - `POST /negotiate` — runs a negotiation, returns `tx_id`, `verdict`
@@ -65,14 +69,20 @@ is no placeholder data in this project. 40 real labeled runs exist on disk.
 - `POST /policy/swap` — send `{"policy_name": "quick_commerce"|"b2b_receivables"}`,
   get back re-scored verdicts for all stored transactions, no LLM calls, near
   instant
-- `GET /selfplay/report` — real precision/recall/F1/FPR numbers
+- `GET /evaluation/report` — authoritative immutable eval-v2 corpus, scope, grouped-holdout, blind-challenge, confidence-interval, constraint, and tamper results
+- `GET /selfplay/report` — legacy provenance-aware provider-corpus diagnostics; never the headline scoreboard
+- `GET /replays/{case_id}` — immutable per-exchange transcript, cart, buyer-agreement, trust, detector, verdict-phase, and payment-boundary frames
+- `POST /replays/{case_id}/review` — disposable STEPUP checkpoint for the human-review interaction
+- `POST /tamper/check` — real changed-payload Ed25519 rejection before detectors
+- `/live/sessions/*` — bounded request/response negotiation and one-shot review
+- MCP stdio tool `warden_authorize_payment` — shared authorization service,
+  explicitly no payment execution
 
-40 pre-run examples exist: `eval_clean_0..9`, `eval_legitimate-revision_0..9`,
-`eval_injected_0..9`, `eval_gradual-drift_0..9`. Pick one strong representative
-`tx_id` per class up front (test them, make sure the transcript reads well)
-and hardcode those four IDs as the hero's default cases. Fetch their real
-transcript + verdict data on page load. Do not invent dialogue — it already
-exists and is better than anything invented.
+The hero uses four scenario-owned `sabziwala_vs_mom` fixtures with multiple
+complete exchanges and explicit buyer agreement. It loads server-derived
+`/replays/{case_id}` frames rather than slicing transcript/verdict JSON in the
+browser. Do not mix the older provider corpus into hero dialogue or headline
+evaluation.
 
 ## Tech stack
 
@@ -220,30 +230,29 @@ One fixed layout, one consistent background scene (nostalgic illustrated
 Indian-street style, à la saloon.wtf — image provided separately, see below).
 The layout does not change between cases. Only the content inside it does.
 
-Shows ONE case at a time:
-- **Transcript panel** — real turn-by-turn dialogue from the fetched
-  transcript (speaker, message). Keep it readable, don't over-truncate.
-- **Trust score display** — a line/graph of `trust_score_trajectory`,
-  animated in. Most visually important on the Drift case, where it should
-  read as a clear, steady decline crossing a visible danger line late in
-  the sequence — not a random jagged mess.
-- **Verdict panel** — pulled from the verdict object: Ed25519 status,
-  ConstraintChecker (violations array), DriftScorer (sudden_drop /
-  gradual_drift / coherence_break), InjectionScanner (injection_flags), and
-  the final verdict (PASS / STEPUP / REJECT) as a clearly colored badge.
+Shows ONE case at a time inside one glass evidence console:
+- **Conversation Stage** — autoplaying buyer/merchant turns with pause,
+  restart, arrows, intent, and optional live composer.
+- **Decision Console** — one unified readout for verdict, trust trajectory,
+  parallel detector rows, cart, agreement evidence, policy, and payment gate.
+  Internal dividers create hierarchy; verdict/trust/detectors are not separate
+  competing glass cards.
 
 **Navigation**: left/right arrows (click or arrow keys) cycle through the
 four cases in this fixed order:
 
 **Clean → Legit → Injection → Drift**
 
-Each arrow press swaps transcript, trust score, and verdict panel content
-with a smooth transition. Background and layout stay constant — this is one
-scene changing state, not four different pages.
+Each case autoplays exchange frames so dialogue and evidence visibly arrive
+together. Arrow presses swap the whole evidence state with a smooth transition;
+background and layout stay constant. Reduced-motion users receive the complete
+final frame immediately.
 
 **Drift case special handling**: when landed on, the verdict should read
 STEPUP and the trust line should visibly cross the danger threshold near the
-end of its trajectory. Do not add live Approve/Reject buttons in the
+end of its trajectory. Stored replay cases do not add Approve/Reject buttons;
+the bounded live addendum below may expose them only while a live STEPUP is
+awaiting human review.
 flip-through hero — that's a deeper interaction, out of scope for the arrow
 flow (see Policy & STEPUP section below for where that belongs).
 
@@ -252,11 +261,9 @@ flow (see Policy & STEPUP section below for where that belongs).
 1. **Architecture** — short explanation of the pipeline: Buyer ↔ Merchant
    negotiation → Ed25519 signature gate → three parallel detectors
    (ConstraintChecker, DriftScorer, InjectionScanner) → policy decision →
-   PASS / STEPUP / REJECT. Visual diagram, not a wall of text. Mention in
-   passing (one sentence, no dedicated interactive screen) that a tampered
-   or invalid signature is rejected before any detector even runs — this is
-   real backend behavior (`signature_gate`), just not something you need to
-   build an interactive demo for.
+   PASS / STEPUP / REJECT. Visual diagram, not a wall of text. The adjacent
+   tamper proof may call the real endpoint and show that an invalid signature
+   is rejected before any detector even runs.
 
 2. **Policy comparison** — this is a real, cheap feature, build it for real.
    A small control lets the visitor re-evaluate the currently-displayed case
@@ -274,10 +281,13 @@ flow (see Policy & STEPUP section below for where that belongs).
    the click. This is your strongest "judgment, not just pattern-matching"
    moment — give it space, just not inside the hero's arrow flow.
 
-4. **Evaluation proof** — real numbers from `/selfplay/report`: precision,
-   recall, F1, FPR, all currently 1.0/1.0/1.0/0.0%. Present as evidence, not
-   marketing copy — a clean stat row plus a short breakdown by class (10
-   clean, 10 legit, 10 injected, 10 drift).
+4. **Evaluation proof** — provenance-aware numbers from `/selfplay/report` and
+   `data/eval_v2/report.json`: semantic precision, recall, F1, FPR, confidence
+   intervals, detector attribution, and exact denominators. The current
+   bounded eval-v2 corpus contains 80 cases (78 in scope) and a grouped
+   27-row holdout. Overall semantic recall is 71.4%, holdout recall is 70.0%,
+   and the untouched blind-challenge tranche is 25% (2/8). It is capability
+   evidence, not production-prevalence data.
 
 5. **Defense-only statement** — one short, plain paragraph: adversarial
    self-play (AttackerAgent) is closed, offline, and used only to harden
@@ -298,11 +308,10 @@ flow (see Policy & STEPUP section below for where that belongs).
 
 ## Explicitly out of scope
 
-- No tamper-check interactive demo (no backend endpoint for it — mention it
-  in the architecture section as a sentence, nothing more)
+- No full payment checkout/capture or production payment movement
 - No cognition/reasoning drawer per turn
-- No presenter mode, debug controls, narration toggles, keyboard shortcut
-  layer beyond arrow-left/arrow-right on the hero
+- No unbounded presenter/debug control layer, narration toggles, or keyboard
+  shortcut layer beyond arrow-left/arrow-right on the hero and live form
 - No separate "scenario" screens beyond what's described above — everything
   lives on one scrollable page
 
@@ -317,3 +326,46 @@ hero, sections can shift to a darker, more neutral tone appropriate for
 evidence/data (architecture, eval) without breaking continuity — think "the
 warmth recedes as the content gets more technical," not four unrelated
 moods.
+
+## Buildathon live-demo addendum (2026-08-31)
+
+This addendum supersedes the earlier prohibition on presenter controls and
+live hero review. The deterministic four-case replay remains the default and
+recording-safe path, but the same hero also provides a bounded **Live demo**
+mode backed by `/live/sessions`:
+
+- Start one `sabziwala_vs_mom` session and update the transcript, cart, trust
+  trajectory, detector meters, and provisional verdict after every exchange.
+- Let the presenter either advance a prepared buyer turn or submit a buyer
+  message through **Ask the sabziwala**. Do not expose attacker generation or
+  arbitrary backend tools.
+- Label provider-backed and deterministic-fallback execution honestly.
+- Show Approve/Reject controls only for a live STEPUP, and allow exactly one
+  human decision for that session.
+- Keep live-session results out of the eval-v2 holdout metrics.
+
+This remains a request/response demonstration, not a websocket dashboard or
+an online-learning surface.
+
+## Buildathon evidence correction (2026-08-31)
+
+This correction supersedes the earlier tamper and presenter-progress scope
+lines. The same one-page navigation now includes a compact six-beat rail for
+Clean PASS, Injection REJECT, Drift STEPUP, policy swap, tamper gate, and
+evaluation. It is a progress control over existing content, not a second app
+or an unbounded debug surface.
+
+The architecture section may call the real `POST /tamper/check` endpoint. The
+interaction signs a cart, changes its total, and shows that Ed25519 rejects it
+before detectors or payment. The section also documents the single real MCP
+tool, `warden_authorize_payment`, as a side-effect-free integration surface.
+It must not imply full A2A conformance, open key registration, payment
+execution, or human-review authority.
+
+The hero's payment state must distinguish:
+
+- stored/full PASS: Razorpay test order created when the persisted explanation
+  contains an order id;
+- live PASS: authorization only, execution pending;
+- STEPUP: payment held for human review;
+- REJECT: no order created.

@@ -55,15 +55,62 @@ class TestAPIFull:
         data = resp.json()
         assert "metrics" in data
 
+    async def test_authoritative_eval_v2_report_contract(self, client):
+        resp = await client.get("/evaluation/report")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["dataset_version"] == "eval-v2-bounded-2026-08-31"
+        assert data["corpus"]["n"] == 80
+        assert data["scope"] == {
+            "in_scope_n": 78,
+            "out_of_scope_n": 2,
+            "out_of_scope_cases": ["injection", "injection_control"],
+        }
+        assert data["all"]["n_evaluated"] == 78
+        assert data["holdout"]["n_evaluated"] == 27
+        assert data["blind_challenge"]["n_evaluated"] == 16
+        assert data["all"]["semantic"]["precision"] == 1.0
+        assert data["holdout"]["semantic"]["recall"] == 0.7
+
+    async def test_selfplay_report_exposes_holdout_scope(self, client, monkeypatch):
+        from warden.eval.testset_builder import TestSetBuilder
+
+        entries = [
+            {"tx_id": "report_clean", "label": "clean", "verdict": "PASS"},
+            {"tx_id": "report_legit", "label": "legitimate-revision", "verdict": "PASS"},
+            {"tx_id": "report_injected", "label": "injected", "verdict": "REJECT"},
+            {"tx_id": "report_drift", "label": "gradual-drift", "verdict": "PASS"},
+        ]
+        monkeypatch.setattr(TestSetBuilder, "load_all", lambda self: entries)
+
+        resp = await client.get("/selfplay/report")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["metric_scope"] == "provenance_aware_semantic_holdout"
+        assert data["n_entries"] == 4
+        assert data["n_evaluated"] <= data["n_entries"]
+        assert data["metrics"] == data["holdout_metrics"]
+        assert data["all_metrics"]["n_evaluated"] == 4
+        assert "stratified" in data["holdout_rule"]
+
     async def test_internal_selfplay_runner_is_not_exposed(self, client):
         resp = await client.post("/selfplay/run", json={"attack_type": "injection", "rounds": 1})
         assert resp.status_code == 404
 
 
 async def test_replay_viewer_is_served(client):
+    root = await client.get("/")
     resp = await client.get("/ui/replay.html")
+    script = await client.get("/ui/warden.js")
+    assert root.status_code == 200
+    assert "Project Warden" in root.text
     assert resp.status_code == 200
+    assert script.status_code == 200
     assert "Project Warden" in resp.text
+    assert 'jsonRequest("/scenarios")' in script.text
+    assert 'scenario: "sabziwala_vs_mom"' in script.text
+    assert "Talk live" in resp.text
+    assert "warden_authorize_payment" in resp.text
 
 
 async def test_replay_scene_is_served(client):

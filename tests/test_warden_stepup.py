@@ -69,6 +69,7 @@ async def test_stepup_persists_pending_state_and_resume_executes(tmp_path, monke
     assert interrupted.get("__interrupt__")
     pending = store.load(tx_id)
     assert pending["verdict"] == "STEPUP"
+    assert pending["signals"]["signature_valid"] is True
 
     resumed = await graph.ainvoke(Command(resume=True), config=config)
     assert resumed["verdict"] == "PASS"

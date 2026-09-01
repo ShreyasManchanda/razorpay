@@ -78,7 +78,7 @@ Razorpay checkout cannot work without a pre-created order_id from the server-sid
 **Severity:** P1
 **Likelihood:** Moderate if split isn't locked before calibration.
 
-If injection patterns are tuned on data that includes held-out samples, metrics are inflated. Mitigation: deterministic hash-based split (`hash(tx_id) % 5 == 0 → holdout`) computed once and stored. Never tune patterns using holdout data. Report both train-slice and holdout-slice metrics separately.
+If injection patterns are tuned on data that includes held-out samples, metrics are inflated. Mitigation: eval-v2 uses deterministic SHA-256 group ordering stratified by label, keeps paired rows together, and stores the holdout IDs. Never tune patterns using holdout data. Report both all-data diagnostics and the untouched holdout separately.
 
 ### R-009: Merchant agent prompt contamination during attack runs
 
@@ -99,7 +99,7 @@ If a negotiation resolves in 2–3 turns, the drift trajectory is too short to s
 **Severity:** P2
 **Likelihood:** Moderate — depends on Gemini Flash mentioning exact product names.
 
-The current implementation extracts items from merchant messages by checking if any word from the catalog item name appears in the message text. This can match on generic words like "wireless" or "speaker" and produce false positives. Mitigation for now: fallback to first catalog item if no matches found. Future improvement: have merchant agent return structured cart items alongside the free-text message.
+The historical implementation extracted items from merchant messages by checking whether any catalog word appeared in text, then defaulted to the first item. That caused the charger-over-budget contamination found in B-011. The current implementation requires explicit buyer agreement, records evidence/warnings, and fails closed for suggestions, merchant-only selections, generic "yes", and empty/ambiguous carts.
 
 ### R-012: Gemini free tier depletes almost immediately
 
@@ -255,7 +255,7 @@ The payment wrapper automatically switched to a mock when credentials were absen
 
 Cart extraction matched catalog words against merchant message text. When a merchant asked "Would you like to add a USB-C Fast Charger 65W as an accessory?" the ₹899 charger entered the cart despite the buyer never accepting it. A clean earbuds negotiation (total 2500) finalized at 3398, tripping `price_ceiling_exceeded` against the 3000 ceiling and producing false clean-run REJECTs (observed on `eval_clean_0_cfcd20`). This poisoned evaluation rows generated before the fix.
 
-**Fix:** Merchant agents now return structured `selected_items` (exact catalog names actually agreed to); `finalize_cart` uses them first and keeps substring matching only as legacy fallback. Shared extraction helper reused by self-play. Pre-fix test-set row archived to `data/eval/testset_pre_cartfix.jsonl`.
+**Fix:** Merchant agents now return structured `selected_items`, but authorization still requires explicit buyer agreement. Merchant-only selections, suggestions, generic "yes", and substring/default fallbacks cannot create a cart. Ambiguous extraction fails closed and the pre-fix test-set row remains archived in `data/eval/testset_pre_cartfix.jsonl`.
 
 ---
 
@@ -268,3 +268,139 @@ Cart extraction matched catalog words against merchant message text. When a merc
 `POST /policy/swap` hand-built its verdicts path from `__file__` and landed on `src/data/verdicts` — the pre-B-004 layout. The missing-directory guard masked the bug, so the endpoint always returned an empty result set instead of re-scoring stored signals.
 
 **Fix:** The route now iterates `VerdictStore.base_dir` directly, guaranteeing it reads the same store every other endpoint uses.
+
+---
+
+### B-013: Hero replay evidence was static or missing until the final frame
+
+**Status:** FIXED
+**Severity:** P0
+**Found:** 2026-08-31
+
+Three sabziwala replay fixtures had empty trust trajectories, and the viewer rendered final detector state instead of updating evidence with each displayed turn. The demo therefore looked like a report even when the transcript advanced.
+
+**Fix:** Every hero fixture now carries a trajectory. Replay progress slices transcript and trust evidence per turn, delays final flags and verdicts until the relevant frame, animates cart and detector values, and cancels superseded GSAP timelines during rapid navigation.
+
+---
+
+### B-014: No bounded real-time negotiation surface existed
+
+**Status:** FIXED
+**Severity:** P0
+**Found:** 2026-08-31
+
+The frontend could only load stored verdicts, so a presenter could not ask the sabziwala a question or demonstrate Warden evaluating a negotiation as it developed.
+
+**Fix:** `/live/sessions` now owns isolated, locked, short-lived sessions. Each turn runs signature verification and all detectors, persists the transcript/verdict, returns a signal-first snapshot, clearly labels deterministic provider fallback, caps the exchange, and supports a one-shot STEPUP review. The hero consumes that contract without mixing live data into held-out evaluation metrics.
+
+---
+
+### B-015: API headline metrics did not match the held-out protocol
+
+**Status:** FIXED
+**Severity:** P1
+**Found:** 2026-08-31
+
+`GET /selfplay/report` previously aggregated every stored row even though the offline evaluator reported a deterministic SHA-256 holdout. That made the UI's “held-out” claim unverifiable and hid the small, imbalanced current denominator.
+
+**Fix:** The API now reports the provenance-aware stratified holdout as the primary metric set, preserves verdict-only and all-data diagnostics separately, exposes the split rule and denominators, and documents the current 8/40 holdout in `data/eval/manifest.json`. Unverified legacy attack rows cannot inflate semantic recall; live sabziwala sessions are explicitly qualitative transfer evidence.
+
+---
+
+### B-016: Live detector or provider degradation could look like a clean approval
+
+**Status:** FIXED
+**Severity:** P1
+**Found:** 2026-08-31
+
+Provider fallback was bounded but an unavailable drift detector could leave a `PASS` verdict with incomplete evidence. The Razorpay wrapper also read only process environment variables while the app loaded `.env` through settings.
+
+**Fix:** Live detector errors now fail closed to `STEPUP` and are surfaced in the signal bundle; provider fallback is labeled. Razorpay credentials resolve through the same settings layer while preserving explicit mock-mode guards. Live sessions are capped, locked, and expired after 30 minutes.
+
+---
+
+### B-017: Frontend state semantics and mobile containment were inconsistent
+
+**Status:** FIXED
+**Severity:** P0
+**Found:** 2026-08-31
+
+Partial replays used the amber STEPUP theme for a generic `CHECK` state, the
+mobile hero retained desktop-width content, and the main viewport omitted the
+active policy/payment boundary. This made provisional analysis look risky and
+caused controls and evidence to leave the mobile viewport.
+
+**Fix:** Added a neutral blue analysis state, consolidated the active visual
+system in `ui/warden.css`, constrained every hero child at 375px, and added a
+synchronized turn/cart-budget/policy/signature/payment rail. Browser checks
+now report `scrollWidth == innerWidth` at 375px.
+
+---
+
+### B-018: Authorization logic was duplicated and not externally integrable
+
+**Status:** FIXED
+**Severity:** P1
+**Found:** 2026-08-31
+
+Live evaluation duplicated the graph's signature/detector/policy behavior, and
+there was no supported way for another agent host to request a Warden decision
+without coupling to HTTP session state.
+
+**Fix:** Extracted a shared side-effect-free authorization service and added
+one strict MCP stdio tool. Unknown agents and changed signatures fail before
+semantic detectors; detector errors fail closed to STEPUP; the tool can never
+execute payment. Direct and real stdio transport tests cover the contract.
+
+---
+
+### B-019: Explicit-agreement hardening blocked live negotiation before acceptance
+
+**Status:** FIXED
+**Severity:** P0
+**Found:** 2026-09-01
+
+After cart reconstruction correctly began failing closed, Live Studio evaluated
+the pre-agreement empty cart as `agreement_ambiguous`, `cart_empty`, and
+`category_mismatch`, returned REJECT, and blocked the session after an ordinary
+offer. The security boundary was correct for final authorization but applied at
+the wrong lifecycle phase.
+
+**Fix:** Pre-agreement live evaluations now expose `ANALYSIS`, pending cart
+constraints, and no payment request. Semantic detectors continue running, so a
+hard injection can still reject immediately. Focused tests cover opening state,
+ordinary provisional turns, injection blocking, agreement, and detector failure.
+
+---
+
+### B-020: Canonical Drift replay could be mutated by human-review controls
+
+**Status:** FIXED
+**Severity:** P1
+**Found:** 2026-09-01
+
+The old review controls resumed `sabziwala_drift_stepup_v1` directly. After one
+approval or rejection, later presenters could load a changed verdict and lose
+the deterministic STEPUP beat.
+
+**Fix:** Canonical replay IDs are immutable at the resume endpoint. The UI calls
+`POST /replays/{case_id}/review` to create a fresh checkpoint, then applies the
+human decision to that disposable transaction only.
+
+---
+
+### B-021: Live questions could be misclassified as payment consent
+
+**Status:** FIXED
+**Severity:** P0
+**Found:** 2026-09-01
+
+The live action classifier treated any occurrence of "haan", "confirm", or
+"final" as buyer acceptance. A presenter asking "freshness confirm karo" could
+therefore complete a session even though cart reconstruction correctly found
+no explicit agreement.
+
+**Fix:** Consent now requires explicit acceptance, order/cart/deal confirmation,
+or equivalent finalization language. Regression tests distinguish ordinary
+questions from authorization, and the prepared three-turn demo remains
+provisional until its final explicit accept.

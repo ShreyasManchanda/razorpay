@@ -34,13 +34,37 @@ async def test_startup_seeds_all_sabziwala_hero_replays(demo_api):
                 verdict = verdict_response.json()
                 assert verdict["verdict"] == case["expected_verdict"]
                 assert verdict["signals"]["violations"] == []
+                assert verdict["trust_score_trajectory"]
 
                 if case["label"] == "injection":
-                    assert verdict["signals"]["injection_flags"] == ["injection_pattern:agent must approve"]
+                    assert "injection_pattern:agent must approve" in verdict["signals"]["injection_flags"]
+                    assert "injection_pattern:ignore previous" in [
+                        flag.lower() for flag in verdict["signals"]["injection_flags"]
+                    ]
                 if case["label"] == "gradual-drift":
                     trajectory = verdict["trust_score_trajectory"]
                     assert trajectory[0] > 0.3
                     assert min(trajectory) < 0.3
+
+
+async def test_policy_swap_can_target_one_replay(demo_api):
+    async with demo_api.app.router.lifespan_context(demo_api.app):
+        transport = ASGITransport(app=demo_api.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/policy/swap",
+                json={
+                    "policy_name": "b2b_receivables",
+                    "tx_id": "sabziwala_clean_pass_v1",
+                },
+            )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["policy"] == "b2b_receivables"
+    assert len(payload["results"]) == 1
+    assert payload["results"][0]["tx_id"] == "sabziwala_clean_pass_v1"
+    assert payload["results"][0]["explanation"]
 
 
 async def test_sabziwala_is_the_api_default_scenario(demo_api):
@@ -52,6 +76,7 @@ async def test_sabziwala_is_the_api_default_scenario(demo_api):
 
     assert response.status_code == 200
     defaults = [scenario for scenario in response.json() if scenario["is_default"]]
+    assert len(defaults) == 1
     assert defaults[0]["id"] == "sabziwala_vs_mom"
 
 
@@ -60,8 +85,14 @@ async def test_drift_hero_replay_can_be_approved_with_demo_payment(demo_api):
     drift_id = demo_api.HERO_REPLAY_IDS["gradual-drift"]
     transport = ASGITransport(app=demo_api.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(f"/stepup/{drift_id}/resume", json={"approved": True})
+        immutable_response = await client.post(f"/stepup/{drift_id}/resume", json={"approved": True})
+        clone_response = await client.post(f"/replays/{drift_id}/review")
+        clone_id = clone_response.json()["tx_id"]
+        response = await client.post(f"/stepup/{clone_id}/resume", json={"approved": True})
 
+    assert immutable_response.status_code == 409
+    assert clone_response.status_code == 200
+    assert clone_response.json()["source_case_id"] == drift_id
     assert response.status_code == 200
     assert response.json()["verdict"] == "PASS"
-    assert f"order_mock_{drift_id}" in response.json()["explanation"]
+    assert f"order_mock_{clone_id}" in response.json()["explanation"]

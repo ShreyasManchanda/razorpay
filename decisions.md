@@ -163,12 +163,12 @@
 
 ## D-014: Frontend approach
 
-**Status:** LOCKED
+**Status:** SUPERSEDED IN PART BY D-030
 **Date:** 2026-08-23
 
-**Decision:** Static replay viewer (plain HTML + Chart.js). No live websocket dashboard.
+**Decision:** Start with a static replay viewer (plain HTML + Chart.js), without an unbounded live websocket dashboard. D-030 later adds a bounded request/response live session while retaining deterministic replay.
 
-**Rationale:** Deliverable format is recorded video, not live demo. Replay of completed runs gives the same visual effect without real-time infrastructure. Minimum viable UI that records well.
+**Rationale:** Deterministic replay remains the reliable recording path. The later buildathon correction requires a judge-typed, per-turn demonstration, but still does not justify persistent websocket infrastructure.
 
 ---
 
@@ -325,7 +325,7 @@ Hard tier has known high FPR on benign text; mitigated by v2 corroboration gate 
 **Status:** LOCKED (revises D-018's ordering; D-018's provider-neutral contract unchanged)
 **Date:** 2026-08-25
 
-**Decision:** Fallback chain order is now TokenRouter (`qwen/qwen3.8-max-free`) → OpenRouter (`minimax/minimax-m2.7`, env-overridable) → Groq (`openai/gpt-oss-20b`) → Gemini (`gemini-3.5-flash`). Missing keys skip a provider silently.
+**Decision:** Fallback chain order is now TokenRouter (`qwen/qwen3.8-max-free`) → OpenRouter (`minimax/minimax-m3:free`, env-overridable) → Groq (`openai/gpt-oss-20b`) → Gemini (`gemini-3.5-flash`). Missing keys skip a provider silently.
 
 **Rationale:** Quota reality: TokenRouter free tier is effectively unlimited; Groq burns out mid-batch when used first; Gemini credits are exhausted. The old Groq-first order made every call pay Groq rate-limit tax before reaching TokenRouter. OpenRouter adds a second high-capacity tier between them.
 
@@ -339,3 +339,121 @@ Hard tier has known high FPR on benign text; mitigated by v2 corroboration gate 
 **Decision:** `MerchantAction` gains `selected_items: list[str]` — exact catalog names the buyer actually agreed to buy. `finalize_cart` builds carts from this field first; substring matching on merchant messages survives only as fallback for pre-contract transcripts.
 
 **Rationale:** Substring extraction put suggested-but-unaccepted accessories in the cart ("would you like to add a charger?" → ₹899 added → false `price_ceiling_exceeded` REJECTs on clean runs), contaminating eval data (B-011). Structured selection makes cart contents deterministic and auditable.
+
+---
+
+## D-030: Live demo sessions are bounded and signal-first
+
+**Status:** LOCKED
+**Date:** 2026-08-31
+
+**Decision:** The replay page may start a bounded `/live/sessions` transaction for the default `sabziwala_vs_mom` scenario. Each `/turns` response appends at most the next buyer/merchant exchange, evaluates the current transcript, and returns transcript, cart, signal bundle, verdict, phase, and execution mode. Presenter messages are accepted as buyer turns. If no provider is configured, a deterministic offline merchant response is used and labeled `fallback`.
+
+**Rationale:** A buildathon judge needs to see the detector react to a message, not only inspect pre-recorded JSON. Bounding the session keeps the live beat deterministic and defense-only while preserving the stored 40-run evaluation set as an independent measurement artifact. Signals—not raw transcript text—remain the policy input.
+
+---
+
+## D-031: One shared authorization service and one MCP tool
+
+**Status:** LOCKED
+**Date:** 2026-08-31
+
+**Decision:** Extract mandate-level signature, detector, and policy evaluation
+into `services.authorization.evaluate_authorization`. Live Studio and the MCP
+adapter call this shared side-effect-free service. MCP exposes exactly one
+stdio tool, `warden_authorize_payment`, with strict bounded inputs and fixed
+policy names. It cannot execute Razorpay, resolve STEPUP, register keys, or
+access in-memory live sessions.
+
+**Rationale:** A single tool provides a genuine integration story without
+building a second A2A relay project. Payload-based MCP works across process
+boundaries; session-id coupling would not. Keeping execution out of the tool
+preserves the payment and human-approval privilege boundaries.
+
+---
+
+## D-032: Presenter progress stays inside the existing one-page product
+
+**Status:** LOCKED
+**Date:** 2026-08-31
+
+**Decision:** Add a compact six-beat rail and synchronized evidence strip to
+the existing hero. Do not add routes or a second presenter application. The
+rail targets existing replay cases and sections; the only new evidence
+interaction is the deterministic tamper gate.
+
+**Rationale:** Judges need a reliable five-minute sequence and visible proof
+of backend capabilities. Reusing the existing page and controls adds narrative
+clarity without creating another navigation system or demo failure surface.
+
+---
+
+## D-033: Bounded eval-v2 is the honest capability boundary
+
+**Status:** LOCKED
+**Date:** 2026-09-01
+
+**Decision:** Treat `data/eval_v2` as the current offline capability benchmark:
+80 deterministic cases, 78 in scope, paired controls, provenance-verified
+attacks, a grouped 27-row holdout, and separate semantic, constraint, and
+tamper metrics. Multilingual injection is retained as an explicitly out-of-
+scope probe. Do not describe these figures as production accuracy or
+production readiness.
+
+**Rationale:** The original verdict-only corpus produced a misleading perfect
+score because constraint rejection masked semantic detection. Eval-v2 exposes
+blind-challenge misses and confidence intervals, preserving useful engineering
+evidence without overstating what a small synthetic corpus proves.
+
+---
+
+## D-034: Replay evidence is immutable and server-framed
+
+**Status:** LOCKED
+**Date:** 2026-09-01
+
+**Decision:** Hero fixtures must end in explicit buyer agreement and reconstruct
+their declared cart from the transcript. `GET /replays/{case_id}` returns one
+server-derived evidence frame per complete exchange. Provisional frames use
+`ANALYSIS`; final policy decisions appear only after agreement. Human review
+uses a new disposable clone and cannot resume a canonical replay transaction.
+
+**Rationale:** Client-side signal slicing looked live but could drift from
+backend semantics, while resuming the stored Drift transaction mutated demo
+evidence for later runs. Server frames keep animation truthful and disposable
+checkpoints make every presentation repeatable.
+
+---
+
+## D-035: Live cart checks remain pending until buyer agreement
+
+**Status:** LOCKED
+**Date:** 2026-09-01
+
+**Decision:** A live session with no buyer-agreed cart returns provisional
+`ANALYSIS`, clears cart-derived constraint violations from policy input, and
+marks the constraint detector pending. Injection, suspicious-pattern, drift,
+and detector-degradation signals may still produce REJECT or STEPUP before
+agreement.
+
+**Rationale:** An empty candidate cart before acceptance is normal negotiation
+state, not a failed authorization. Treating it as final REJECT stopped the live
+conversation after its first offer and confused absence of consent with a bad
+signed mandate.
+
+---
+
+## D-036: Live consent requires explicit finalization language
+
+**Status:** LOCKED
+**Date:** 2026-09-01
+
+**Decision:** Treat generic affirmations and questions containing words such as
+"haan", "final", or "confirm" as negotiation turns unless they explicitly
+accept a cart, order, or deal. The signed cart extractor remains the authority
+for item-level agreement evidence.
+
+**Rationale:** A freshness or final-price question is not payment consent.
+Completing a live session from a keyword alone would reproduce the exact
+difference between identity and honest authorization that Warden exists to
+enforce.

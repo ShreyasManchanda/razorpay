@@ -28,7 +28,7 @@ Everything else from both prior docs carries over unchanged because it checked o
 ## 1. Locked decisions (read this before anything else)
 
 - **Track: 02 (AI Risk Manager).** Track 02's bar — *"a working detector, verifier or auto-responder for one class of loss, with measured precision and recall on a held-out test set... honest metrics including false-positive cost... strictly defense-only"* — is a near-verbatim description of what Warden is. Confirmed against the live buildathon page. Not re-litigating this.
-- **Deliverable format: public GitHub repo + 5-minute pitch video + architecture doc, then a panel interview only if shortlisted.** No live stage exists before that. Everything here is built for a recording and an async reader, not a demo booth.
+- **Deliverable format: public GitHub repo + 5-minute pitch video + architecture doc, then a panel interview only if shortlisted.** The bounded live surface is an additional buildathon-demo path; it does not change the recorded benchmark contract.
 - **Class of loss:** agent-to-agent transactions that pass mandate/signature verification but were obtained dishonestly — via structural prompt injection in merchant free-text, or manipulative reasoning drift in the buyer agent.
 - **Timeline:** today is Aug 22, 2026; applications close Sep 5 — roughly two weeks.
 
@@ -66,9 +66,9 @@ Explicitly not building: multi-category generality, live/online learning in prod
 | Mandate signing | **PyNaCl** (`nacl.signing`), Ed25519 | Simpler sign/verify API than `cryptography` for this use case. |
 | Storage | Flat append-only JSON files | No DB. Already decided — don't relitigate while building. |
 | API layer | FastAPI | Matches your stack; `razorpay` SDK examples assume it. |
-| Payments | `razorpay` Python SDK, test-mode keys, Orders API (`create → checkout → capture`) | Confirmed cheap to integrate — a few hours, not a research problem. |
-| Frontend / observability | Static replay, not a live dashboard (§14) | You need 4 visuals for a *recorded* 5-minute video, not a production UI. |
-| Human-in-the-loop (STEPUP) | LangGraph `interrupt()` + `Command(resume=...)` + `InMemorySaver` checkpointer | Native LangGraph pattern for exactly this shape of pause-for-approval. |
+| Payments | `razorpay` Python SDK, test-mode keys, Orders API creation | The build proves server-side test order creation; checkout and capture are outside scope. |
+| Frontend / observability | Static replay plus a bounded live-session demo (§14) | Stored cases make the 5-minute pitch deterministic; the live session lets a judge type a sabziwala message and watch per-turn evidence update without exposing attacker tooling. |
+| Human-in-the-loop (STEPUP) | LangGraph `interrupt()` + `Command(resume=...)` + `MemorySaver` checkpointer | Native LangGraph pattern for exactly this shape of pause-for-approval. |
 | Evaluation batching | Four phase commands, 10 runs each: `run_clean_10.cmd`, `run_legit_10.cmd`, `run_injection_10.cmd`, `run_drift_10.cmd` | Free provider quotas vary. Isolated batches append results incrementally and can be resumed without rerunning completed transactions. |
 
 ---
@@ -132,11 +132,9 @@ warden/
 │   │   ├── testset_builder.py       # THREE generation paths — see §10
 │   │   └── metrics.py               # precision/recall/F1/FPR + cost-weighted threshold sweep
 │   └── api/
-│       ├── main.py
-│       ├── routes_negotiation.py
-│       ├── routes_warden.py
-│       └── routes_selfplay.py
-├── ui/                              # static replay viewer, see §14
+│       ├── main.py                 # core negotiation, policy, review, and report routes
+│       └── live.py                 # bounded interactive sabziwala sessions
+├── ui/                              # replay + bounded live demo, see §14
 ├── scripts/
 │   ├── gen_keys.py
 │   ├── gen_testset.py
@@ -282,7 +280,7 @@ START → signature_gate → route(sig_valid?)
 - Three detection nodes fan out from `signature_gate`'s valid branch and fan back in at `merge_signals`; they don't depend on each other's output, so they're not forced sequential. Each returns only its own key (`violations` / `drift` / `injection_flags`) in its partial state update — this is what avoids the collision from Fix #4. `merge_signals` is a pure combiner: no logic, just assembles the three keys into `signals: SignalBundle`.
 - `policy_decision` is typed against `PolicyDecisionInput` (§6), not the full `WardenState` — this is what makes "policy layer never touches the transcript" a structural property instead of a comment (Fix #5).
 - **A separate `record_stepup` node persists pending review state before `stepup_wait`.** Then `stepup_wait` does nothing except call `interrupt()` and route the resume value; no side effects occur inside that node — LangGraph re-runs a node from its start on resume, so anything side-effecting placed before the `interrupt()` line would fire twice (Fix #7).
-- `route(approved?)` after resume sends `True` → `execute_payment`, `False` → `write_incident` (Fix #6). Requires a checkpointer (`InMemorySaver` is enough for a demo) and a stable `thread_id` per `tx_id`.
+- `route(approved?)` after resume sends `True` → `execute_payment`, `False` → `write_incident` (Fix #6). Requires a checkpointer (`MemorySaver` is enough for a demo) and a stable `thread_id` per `tx_id`.
 
 ### 7.3 `selfplay_graph` — outer loop wrapping the other two as subgraphs (redrawn, Fix #8)
 
@@ -424,11 +422,18 @@ AGENT_REGISTRY = {
 | `gradual-drift` | `selfplay_graph`, `attack_type="gradual_drift"` | AttackerAgent modifies the merchant's negotiation *strategy* to incrementally escalate an upsell across turns — no single injected string |
 | `legitimate-revision` | Plain `negotiation_graph` runs, merchant prompted to genuinely surface a better alternative | Not an attack at all — no AttackerAgent involvement. Buyer changes its own mind for a real reason. |
 
-Target 30-50 negotiations total, roughly even across the four classes. Generate once; hold out ~20% that InjectionScanner pattern versions are never tuned against — report the metrics table on the held-out slice. That split is the literal meaning of "held-out test set."
+The current bounded benchmark is `eval-v2`: 80 deterministic cases, 78 in
+scope, with clean/legitimate controls, delivered injection and drift attacks,
+constraint violations, signature tampering, edge-case carts, and paired
+controls. Multilingual injection is retained as an out-of-scope probe and is
+not included in headline metrics. The grouped holdout is deterministic and
+keeps each pair together; no detector rule may be tuned against it.
 
 **Metrics reported (the actual upgrade over a bare precision/recall table):**
-- Precision, recall, F1 for the REJECT/STEPUP decision, with `injected` + `gradual-drift` as positives.
-- False-positive rate specifically on `clean` + `legitimate-revision` — this is the "false-positive cost" number, reported even if unflattering.
+- Semantic precision, recall, F1, and 95% confidence intervals for delivered `injected` + `gradual-drift` cases. A REJECT caused only by a constraint is not a semantic catch.
+- False-positive rate specifically on `clean` + `legitimate-revision`, with its confidence interval and denominator.
+- Constraint recall and signature/tamper recall reported independently from semantic detection.
+- Every unverified attack attempt and every blind-challenge miss is listed, not silently counted as a successful attack or removed from the denominator.
 - A one-line cost model justifying the chosen operating threshold: a false REJECT costs one lost legitimate sale; a false PASS on an `injected`/`gradual-drift` case costs the manipulation getting through. State which you weighted more heavily (for a payments risk product, false PASS is usually the more expensive error) and set `injection_action`/thresholds accordingly.
 
 **Defense-only compliance — put this in the README verbatim:**
@@ -461,10 +466,10 @@ Live demo beat: same transcript through a conservative quick-commerce policy vs.
 
 ## 12. Execution layer — Razorpay
 
-`razorpay` Python SDK, test-mode `key_id`/`key_secret`. Orders API flow: `create order → checkout → capture`. This is a server-side API call — create the order before initiating payment, or it can't be captured. Confirmed cheap: a few hours of integration work with FastAPI, not a research problem.
+`razorpay` Python SDK, test-mode `key_id`/`key_secret`. The implemented boundary is server-side Orders API creation. Checkout and capture are deliberately outside this build; the demo must say "test order created," not "payment captured."
 
 ```
-PASS → sign Payment Mandate → razorpay_client.create_order() → checkout → capture (test mode)
+PASS → build PaymentMandate → razorpay_client.create_order() (test mode)
 ```
 
 ---
@@ -473,64 +478,102 @@ PASS → sign Payment Mandate → razorpay_client.create_order() → checkout �
 
 ```
 POST /negotiate                  → runs negotiation_graph + warden_graph for a fresh tx_id, returns verdict
+GET  /                           → presenter interface
+GET  /replays/{case_id}          → immutable server-derived transcript/cart/signal frames per exchange
+POST /replays/{case_id}/review  → clone a STEPUP fixture into a disposable resumable checkpoint
+POST /live/sessions              → starts a bounded sabziwala live-demo session
+GET  /live/sessions/{session_id} → current transcript, signals, cart, verdict, phase, and execution mode
+POST /live/sessions/{session_id}/turns
+                                → append a presenter message or advance the scripted buyer/merchant turn;
+                                    returns the same live snapshot after detector evaluation
+POST /live/sessions/{session_id}/review
+                                → resolve live STEPUP authorization state once; does not create an order
+POST /tamper/check              → modify a signed cart and reject before detectors or payment
 GET  /transcripts/{tx_id}        → full turn-by-turn transcript
 GET  /verdicts/{tx_id}           → SignalBundle + Verdict + explanation + trust_score_trajectory
 POST /policy/swap                → re-run policy_decision on an existing tx_id's stored signals against a
                                     different PolicyConfig — the "live policy swap" beat, cheap because
                                     signals and policy are stored separately
 POST /stepup/{tx_id}/resume      → {"approved": bool} → Command(resume=...) on the paused graph thread
-POST /selfplay/run                → kick off N self-play rounds
-GET  /selfplay/report             → precision/recall/F1/FPR table + attack-success-rate-by-round series
+GET  /selfplay/report             → held-out precision/recall/F1/FPR table, all-data diagnostics, and attack-success-rate-by-round series
+GET  /evaluation/report          → validated immutable eval-v2 artifact (80 corpus / 78 in scope / 27 holdout)
 ```
+
+Live turn classification is intentionally conservative. Generic affirmations
+and requests to confirm price or freshness remain negotiation counters; only
+explicit acceptance, order confirmation, or equivalent finalization can
+advance the session into an agreed authorization state. Transaction-bearing
+utterances are normalized locally into catalog-backed offers, including common
+Hindi/English aliases, gram/kilo quantities, substitutions, removals, additions,
+and bargaining. A deterministic opening and common market/payment answers keep
+the presenter path responsive. Broader open-ended dialogue uses the provider
+fallback chain, but its output cannot change the active cart; only the grounded
+transaction path has that authority. Each response exposes
+`reply_source=provider|rules|fallback`. If providers fail, a bounded contextual
+reply preserves the current offer and states unsupported claims plainly. The
+local embedding model warms during API startup. Live drift scores a state summary containing
+the original mandate and resolved cart plus the verbatim buyer instruction,
+rather than treating short chat fragments as full agent reasoning traces.
+
+MCP is a separate stdio adapter, not another HTTP route. It exposes exactly
+one side-effect-free tool, `warden_authorize_payment`, over the shared
+authorization service. The tool accepts typed intent, signed cart, transcript,
+and a fixed policy name; it never executes payment or resolves STEPUP.
 
 ---
 
 ## 14. Frontend / observability — build the minimum that records well
 
-No live, websocket-streaming dashboard needed — the video shows a **replay** of completed runs:
+The page supports both deterministic replay and a bounded live-session mode.
+Live dialogue is free-form within the sabzi-market scenario, with graceful
+off-topic redirection and an explicit provider/rules/fallback label. It does not
+expose an unbounded websocket dashboard:
 
-- One static page (plain HTML + Chart.js, or a light React page — either is fine, don't over-invest) that:
-  1. Loads a `transcripts/{tx_id}.json` + `verdicts/{tx_id}.json` pair.
-  2. Steps through turns on a click, rendering the trust-score line incrementally — gives the "live" visual in the recording without real-time infra.
-  3. Renders the mandate chain (intent → cart → payment) with signature-status badges.
-  4. A second view: the precision/recall/FPR table and the attack-success-rate-by-round chart, rendered once from `GET /selfplay/report`, no live updates needed.
-- A few hours of work if not gold-plated. This is the easiest place to silently burn two of your fourteen days — resist it.
+- One static build-free HTML/CSS/JS page that:
+  1. Loads immutable `/replays/{case_id}` frames derived from explicit-agreement fixtures and backend detector contracts.
+  2. Autoplays buyer/merchant exchanges with visible pause/restart controls, rendering cart, trust, agreement provenance, and signals in sync; or starts `/live/sessions` for a fresh sabziwala exchange.
+  3. Renders transcript, turn, cart/budget, merchant cart signature, trust threshold, parallel detector bundle, policy, verdict, and order gate together.
+  4. Provides policy rescore, tamper proof, disposable one-shot STEPUP review, MCP integration evidence, and the authoritative eval-v2 report on the same scrollable page.
 
 ---
 
 ## 15. End-to-end wiring, one transaction
 
 ```
-1. Client: POST /negotiate {intent_text, max_price, red_lines, attack_type?}
-2. API builds + signs IntentMandate (buyer key), invokes negotiation_graph
+1. Client: POST /negotiate {intent_text, max_price, red_lines, attack_type?}, or
+   POST /live/sessions for an incremental sabziwala demo session
+2. API builds the buyer IntentMandate and invokes negotiation_graph
    → each turn written to data/transcripts/{tx_id}.json as it happens
 3. negotiation_graph → finalize_cart → merchant signs Cart Mandate
 4. API invokes warden_graph with the CanonicalMandate + full transcript
    → signature_gate → [constraint_checker ‖ drift_scorer ‖ injection_scanner] → merge_signals → policy_decision
-5a. PASS    → execute_payment (razorpay create → checkout → capture) → verdict written
+5a. PASS    → execute_payment (Razorpay test order creation) → verdict written
 5b. STEPUP  → stepup_wait calls interrupt() → API returns {"status": "awaiting_approval"} to caller
                → UI approval click → POST /stepup/{tx_id}/resume {"approved": true}
                → Command(resume=True) on same thread_id → route(approved?) → 5a or write_incident
 5c. REJECT  → IncidentRecord written, no payment call ever made
-6. Replay UI reads transcripts/{tx_id}.json + verdicts/{tx_id}.json to render the demo view
+6. Replay UI reads immutable server-derived frames for deterministic cases. Live mode
+   calls /live/sessions/{id}/turns; each response updates the transcript, trust path,
+   detector signals, cart, and provisional/final verdict in place. Before explicit
+   buyer agreement, ordinary exchanges remain ANALYSIS and cart checks stay pending;
+   hard semantic attacks may still stop the session immediately.
 ```
 
 ---
 
 ## 16. Deliverables & 5-minute video script
 
-Format confirmed: **public repo + 5-minute video + architecture doc**, then a panel only if shortlisted. No live stage — build for a recording and an async reader.
+Format confirmed: **public repo + 5-minute video + architecture doc**, then a panel only if shortlisted. The current page also supports a bounded live negotiation for an in-person or recorded demo; the benchmark remains offline and reproducible.
 
 - **Repo README:** the defense-only statement (§10) verbatim, plus the honesty boundary on self-play (§17) — panel members reading async need this in text, not just narrated.
 - **Architecture doc:** §7 of this document, essentially as-is.
 - **Video, budgeted to 5 minutes:**
   1. ~30s — one-sentence pitch (§2) + why Track 02, stated up front.
   2. ~60s — clean run: PASS, mandate chain shown, trust score flat/high.
-  3. ~90s — attack run: injected instruction, trust score visibly drops, REJECT with plain-English explanation. The track's explicit "one failure handled gracefully."
-  4. ~45s — policy swap: same transcript, stricter policy, PASS → STEPUP, zero code change.
-  5. ~45s — self-play hardening chart + pattern-library version diff.
-  6. ~30s — mandate tamper check: modify a signed cart, show the signature gate fail before detection even runs.
-  - **Cut from the video, held for the panel only:** a live judge-typed injection attempt. Doesn't work in a recording; strong answer if a panelist asks to see it live.
+  3. ~55s — injection run: highlight the agent-directed imperative, show InjectionScanner REJECT, and prove that no order was created.
+  4. ~55s — drift run: trust crosses 0.45, Warden pauses at STEPUP, and a human gets the final decision.
+  5. ~45s — policy swap + tamper: the injection bundle changes REJECT → STEPUP under B2B, then a changed cart fails Ed25519 before detection.
+  6. ~40s — MCP integration, honest eval-v2 holdout metrics and confidence intervals, blind-challenge misses, limitations, and defense-only close.
 
 ---
 
@@ -578,7 +621,7 @@ Same mechanics throughout: AttackerAgent (with `attack_type`) → log attempts �
 21. `graph/selfplay_graph.py` — per §7.3.
 22. `eval/testset_builder.py` — **three generation paths** per §10, not one.
 23. `eval/metrics.py` — precision/recall/F1, FPR, cost-weighted threshold, held-out split.
-24. `routes_selfplay.py`.
+24. `live.py` bounded session router and the consolidated `main.py` API surface.
 
 **Phase 6 — stretch, in priority order**
 25. `agents/pattern_synthesizer.py` + version-bump logic.

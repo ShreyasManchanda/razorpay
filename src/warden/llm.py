@@ -55,9 +55,18 @@ class LLMProviderChain:
             )
         return self._build(self.chain[0], temperature, model_override)
 
-    def structured_instances(self, temperature: float = 0.5, model_override: str | None = None) -> list:
+    def structured_instances(
+        self,
+        temperature: float = 0.5,
+        model_override: str | None = None,
+        provider_order: tuple[str, ...] | None = None,
+    ) -> list:
         """Materialize the provider chain once so all providers use one output contract."""
-        return [self._build(c, temperature, model_override) for c in self.chain]
+        configs = self.chain
+        if provider_order:
+            rank = {provider: index for index, provider in enumerate(provider_order)}
+            configs = sorted(self.chain, key=lambda config: rank.get(config["provider"], len(rank)))
+        return [self._build(c, temperature, model_override) for c in configs]
 
     def _build(self, config: dict, temperature: float, model_override: str | None):
         model = model_override or config["model"]
@@ -111,9 +120,10 @@ class FallbackStructured:
     instantly would burn limited daily quotas (e.g. OpenRouter free tier) on blips.
     """
 
-    def __init__(self, instances: list, schema):
+    def __init__(self, instances: list, schema, *, retry_attempts: int | None = None):
         self.instances = instances
         self.schema = schema
+        self.retry_attempts = max(1, RETRY_ATTEMPTS if retry_attempts is None else retry_attempts)
 
     def _is_retryable(self, exc: Exception) -> bool:
         msg = str(exc).lower()
@@ -186,7 +196,7 @@ class FallbackStructured:
     async def ainvoke(self, messages, **kwargs):
         last_exc = None
         for i, llm in enumerate(self.instances):
-            for attempt in range(RETRY_ATTEMPTS):
+            for attempt in range(self.retry_attempts):
                 try:
                     prompt = list(messages) + [self._schema_prompt(self.schema)]
                     response = await llm.ainvoke(prompt, **kwargs)
@@ -201,12 +211,12 @@ class FallbackStructured:
                     if not self._is_retryable(e):
                         raise
                     last_exc = e
-                    if attempt < RETRY_ATTEMPTS - 1:
+                    if attempt < self.retry_attempts - 1:
                         delay = RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)]
                         logger.warning(f"Provider {i} failed ({type(e).__name__}), retrying in {delay}s.")
                         await asyncio.sleep(delay)
                         continue
-                    logger.warning(f"Provider {i} still failing after {RETRY_ATTEMPTS} attempts.")
+                    logger.warning(f"Provider {i} still failing after {self.retry_attempts} attempts.")
         raise last_exc or RuntimeError("All providers failed")
 
 

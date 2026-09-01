@@ -10,6 +10,7 @@ class Turn(TypedDict):
     message: str
     timestamp: str
     selected_items: NotRequired[list[str]]
+    offered_items: NotRequired[list[dict[str, Any]]]
 
 
 class NegotiationState(TypedDict):

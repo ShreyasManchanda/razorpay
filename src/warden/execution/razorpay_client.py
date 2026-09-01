@@ -1,6 +1,8 @@
 import os
 from unittest.mock import MagicMock
 
+from warden.config import settings
+
 
 class RazorpayClient:
     """Thin wrapper around the razorpay SDK for test mode."""
@@ -12,8 +14,14 @@ class RazorpayClient:
         *,
         allow_mock: bool = False,
     ):
-        self.key_id = key_id or os.environ.get("RAZORPAY_KEY_ID", "")
-        self.key_secret = key_secret or os.environ.get("RAZORPAY_KEY_SECRET", "")
+        # Prefer explicit constructor values, then exported env vars, then the
+        # pydantic settings object that reads the repository's .env file.
+        self.key_id = key_id if key_id is not None else os.environ.get("RAZORPAY_KEY_ID") or settings.razorpay_key_id
+        self.key_secret = (
+            key_secret
+            if key_secret is not None
+            else os.environ.get("RAZORPAY_KEY_SECRET") or settings.razorpay_key_secret
+        )
         self._client = None
         self._mock = allow_mock
 

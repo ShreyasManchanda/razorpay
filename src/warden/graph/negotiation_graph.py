@@ -1,4 +1,6 @@
 import datetime
+import math
+import re
 from typing import Literal
 
 from langgraph.graph import END, StateGraph
@@ -76,50 +78,157 @@ def route_termination(state: NegotiationState) -> Literal["buyer_turn", "finaliz
 
 
 def build_cart_from_turns(turns: list[Turn], catalog: list[dict]) -> CartMandate:
-    """Build a cart from merchant turns, preferring structured selected_items.
+    """Build a cart only from evidence of buyer agreement.
 
-    Primary source: the merchant agent's explicit selected_items contract
-    (exact catalog names the buyer actually agreed to buy). The substring
-    heuristic is only a fallback for transcripts produced before that field
-    existed — it over-matches suggested accessories (B-011).
+    Merchant ``selected_items`` is an offer/settlement hint, not proof that a
+    buyer accepted every item.  Older code used message substring matching and
+    finally defaulted to the first catalog item; both behaviours can turn a
+    suggestion into an authorization.  Ambiguous transcripts now produce an
+    empty, explicitly marked cart so the constraint/policy layer fails closed.
     """
     catalog_by_name = {item["name"].lower(): item for item in catalog}
     items: list[dict] = []
     seen: set[str] = set()
+    evidence: list[str] = []
+    warnings: list[str] = []
 
-    def add_item(item: dict):
+    def add_item(item: dict, reason: str):
         name_key = item["name"].lower()
         if name_key not in seen:
             seen.add(name_key)
             items.append(item)
+            evidence.append(reason)
 
-    for t in turns:
-        if t.get("speaker") != "merchant_agent":
-            continue
-        for name in t.get("selected_items") or []:
-            match = catalog_by_name.get(name.lower())
+    def matching_names(message: str) -> list[str]:
+        """Return catalog names explicitly referred to by a buyer message.
+
+        Full names are preferred; a single distinctive catalog token is
+        accepted only when it identifies exactly one item.  This avoids the
+        old ``any(word in message)`` over-match (e.g. a charger suggestion).
+        """
+        text = str(message or "").lower()
+        exact = [item["name"] for item in catalog if item["name"].lower() in text]
+        if exact:
+            return exact
+        stop = {"the", "a", "an", "pro", "lite", "fast", "wireless", "smart", "usb", "c"}
+        token_hits: dict[str, int] = {}
+        for item in catalog:
+            tokens = {t for t in re.findall(r"[a-z0-9]+", item["name"].lower()) if t not in stop and len(t) > 2}
+            hits = sum(1 for token in tokens if re.search(rf"\b{re.escape(token)}\b", text))
+            if hits:
+                token_hits[item["name"]] = hits
+        # A token is safe only if it identifies one catalog item.
+        return [name for name, hits in token_hits.items() if hits >= 1] if len(token_hits) == 1 else []
+
+    def structured_items(turn: Turn) -> list[tuple[str, dict]]:
+        """Resolve structured item names without treating malformed fields as evidence."""
+        raw_offers = turn.get("offered_items") or []
+        resolved_offers: list[tuple[str, dict]] = []
+        if isinstance(raw_offers, list):
+            for raw_offer in raw_offers:
+                if not isinstance(raw_offer, dict):
+                    continue
+                match = catalog_by_name.get(str(raw_offer.get("name", "")).lower())
+                if not match:
+                    continue
+                try:
+                    quantity = float(raw_offer.get("quantity", 1))
+                    unit_price = float(raw_offer.get("unit_price", match["price"]))
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(quantity) or not math.isfinite(unit_price):
+                    continue
+                if quantity <= 0 or quantity > 100 or unit_price < 0 or unit_price > 1_000_000:
+                    continue
+                offered = dict(match)
+                offered.update(
+                    quantity=quantity,
+                    unit=str(raw_offer.get("unit", "unit")),
+                    unit_price=unit_price,
+                    price=round(quantity * unit_price, 2),
+                )
+                resolved_offers.append((match["name"], offered))
+        if resolved_offers:
+            return resolved_offers
+
+        raw_items = turn.get("selected_items") or []
+        if isinstance(raw_items, str):
+            raw_items = [raw_items]
+        resolved: list[tuple[str, dict]] = []
+        for raw_name in raw_items:
+            match = catalog_by_name.get(str(raw_name).lower())
             if match:
-                add_item(match)
+                resolved.append((match["name"], match))
+        return resolved
+
+    affirmative = re.compile(
+        r"\b(?:accept|accepted|agree|confirmed|confirm|buy|purchase|take|go\s+with|let'?s\s+do\s+it|yes)\b",
+        re.I,
+    )
+    negative = re.compile(r"\b(?:would\s+you\s+like|suggest|optional|maybe|consider|offer)\b", re.I)
+
+    for idx, turn in enumerate(turns):
+        speaker = turn.get("speaker")
+        if speaker == "merchant_agent":
+            continue
+        if speaker != "buyer_agent":
+            continue
+        message = str(turn.get("message", ""))
+        selected = [name for name, _match in structured_items(turn)]
+        explicit = matching_names(message)
+        is_accept = str(turn.get("action", "")).lower() == "accept" or bool(affirmative.search(message))
+        if not is_accept or negative.search(message):
+            continue
+        accepted = selected or explicit
+        evidence_prefix = f"buyer_agreement:turn_{idx}"
+        offered_by_name: dict[str, dict] = {}
+        # A generic acceptance ("yes", "final kar do") is valid only when it
+        # follows a structured merchant offer. Explicitly named acceptance also
+        # inherits quantity and negotiated price from the nearest matching offer.
+        for offer_idx in range(idx - 1, -1, -1):
+            offer_turn = turns[offer_idx]
+            if offer_turn.get("speaker") != "merchant_agent":
+                continue
+            offer_items = structured_items(offer_turn)
+            if not offer_items:
+                continue
+            offer_message = str(offer_turn.get("message", ""))
+            optional_add_on = re.search(
+                r"\b(?:would\s+you\s+like|optional|add|accessor(?:y|ies)|charger)\b",
+                offer_message,
+                re.I,
+            )
+            if optional_add_on and not accepted:
+                break
+            candidate = {name.lower(): item for name, item in offer_items}
+            if accepted and not any(name.lower() in candidate for name in accepted):
+                continue
+            offered_by_name = candidate
+            if not accepted:
+                accepted = [name for name, _match in offer_items]
+            evidence_prefix = f"buyer_agreement:turn_{idx}:merchant_offer_turn_{offer_idx}"
+            break
+        if not accepted:
+            warnings.append(f"buyer_acceptance_ambiguous:turn_{idx}")
+            continue
+        for name in accepted:
+            match = offered_by_name.get(name.lower()) or catalog_by_name.get(name.lower())
+            if match:
+                add_item(match, f"{evidence_prefix}:{match['name']}")
 
     if not items:
-        for t in turns:
-            if t["speaker"] == "merchant_agent" and t["action"] in ("offer", "accept"):
-                msg = t.get("message", "").lower()
-                for item in catalog:
-                    name_words = item["name"].lower().split()
-                    if any(w in msg for w in name_words):
-                        add_item(item)
-
-    if not items:
-        items = [catalog[0]]
+        warnings.append("no_explicit_buyer_agreement")
 
     total = sum(i["price"] for i in items)
-    category = items[0].get("category", "electronics")
+    category = items[0].get("category", "unknown") if items else "unknown"
     return CartMandate(
         agent_id="merchant_agent_v1",
         items=items,
         total=total,
         category=category,
+        agreement_status="agreed" if items else "ambiguous",
+        agreement_evidence=evidence,
+        extraction_warnings=warnings,
     )
 
 

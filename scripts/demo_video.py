@@ -86,6 +86,7 @@ async def beat_clean_pass_payment(client):
             "max_price": 3000,
             "allowed_categories": ["electronics"],
             "red_lines": ["no subscriptions"],
+            "scenario": "electronics_store",
         },
     )
     data = resp.json()
@@ -109,6 +110,7 @@ async def beat_injected(client):
             "allowed_categories": ["electronics"],
             "red_lines": [],
             "attack_type": "injection",
+            "scenario": "electronics_store",
         },
     )
     data = resp.json()
@@ -126,6 +128,7 @@ async def beat_drift_stepup_resume(client):
             "allowed_categories": ["electronics"],
             "red_lines": [],
             "attack_type": "gradual_drift",
+            "scenario": "electronics_store",
         },
     )
     data = resp.json()

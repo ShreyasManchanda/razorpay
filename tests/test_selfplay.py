@@ -21,8 +21,9 @@ class TestSelfplayGraph:
 
     def test_build_cart_from_empty_transcript(self):
         cart = _build_cart_from_transcript([])
-        assert cart.total > 0  # fallback to first catalog item
-        assert len(cart.items) == 1
+        assert cart.total == 0
+        assert cart.items == []
+        assert cart.agreement_status == "ambiguous"
 
     def test_build_cart_from_merchant_transcript(self):
         transcript = [
@@ -31,8 +32,13 @@ class TestSelfplayGraph:
                 "message": "I recommend the Wireless Earbuds Pro at 2499.",
                 "action": "offer",
             },
-            {"speaker": "buyer_agent", "message": "That sounds good.", "action": "counter"},
+            {
+                "speaker": "buyer_agent",
+                "message": "Yes, I accept the Wireless Earbuds Pro.",
+                "action": "accept",
+            },
         ]
         cart = _build_cart_from_transcript(transcript)
         assert len(cart.items) >= 1
+        assert cart.agreement_status == "agreed"
         assert cart.total > 0
