@@ -55,7 +55,8 @@ regenerate, do not treat this as a placeholder.
 Every data point below comes from a working API, already running locally with
 zero CORS friction (FastAPI serves `ui/` as static files, same-origin). There
 is no placeholder data in this project. The authoritative eval-v2 artifact has
-80 deterministic cases, 78 in scope, plus a grouped 27-row holdout. The older
+80 deterministic cases, 78 in scope, plus a deterministic grouped 22-row
+holdout that excludes the blind-challenge tranche. The older
 40-row provider corpus remains diagnostics only.
 
 - `GET /scenarios` — list of available negotiation scenarios
@@ -284,10 +285,12 @@ flow (see Policy & STEPUP section below for where that belongs).
 4. **Evaluation proof** — provenance-aware numbers from `/selfplay/report` and
    `data/eval_v2/report.json`: semantic precision, recall, F1, FPR, confidence
    intervals, detector attribution, and exact denominators. The current
-   bounded eval-v2 corpus contains 80 cases (78 in scope) and a grouped
-   27-row holdout. Overall semantic recall is 71.4%, holdout recall is 70.0%,
-   and the untouched blind-challenge tranche is 25% (2/8). It is capability
-   evidence, not production-prevalence data.
+  bounded eval-v2 corpus contains 80 cases (78 in scope) and a grouped
+  22-row holdout. Overall semantic recall is 71.4%, holdout recall is 100%,
+  and the untouched blind-challenge tranche is 25% (2/8). The scoreboard must
+  also disclose the operational false-pass/false-STEPUP counts and weighted
+  cost from the report. It is capability evidence, not production-prevalence
+  data; the blind tranche is the generalization warning.
 
 5. **Defense-only statement** — one short, plain paragraph: adversarial
    self-play (AttackerAgent) is closed, offline, and used only to harden

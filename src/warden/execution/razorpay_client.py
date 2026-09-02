@@ -27,10 +27,14 @@ class RazorpayClient:
 
     def _ensure_client(self):
         if self._client is None:
-            if not self.key_id or not self.key_secret:
-                if not self._mock:
-                    raise RuntimeError("Razorpay credentials are required for payment execution")
+            # ``allow_mock`` is an explicit caller choice (used by replays and
+            # tests), so never import or contact the SDK even if credentials
+            # happen to be present in the developer's environment.
+            if self._mock:
                 self._client = MagicMock()
+                return
+            if not self.key_id or not self.key_secret:
+                raise RuntimeError("Razorpay credentials are required for payment execution")
             else:
                 import razorpay
 

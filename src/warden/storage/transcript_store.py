@@ -1,6 +1,8 @@
 import json
 import os
 
+from .path_utils import atomic_json_dump, safe_json_path, validate_tx_id
+
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data")
 
 
@@ -13,26 +15,25 @@ class TranscriptStore:
         path = self._path(tx_id)
         turns = []
         if os.path.exists(path):
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 turns = json.load(f)
         turns.append(turn)
-        with open(path, "w") as f:
-            json.dump(turns, f, indent=2, default=str)
+        atomic_json_dump(path, turns)
 
     def load(self, tx_id: str) -> list[dict]:
         path = self._path(tx_id)
         if not os.path.exists(path):
             return []
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
 
     def reset(self, tx_id: str):
         """Discard an orphaned partial transcript before retrying the same tx_id."""
-        with open(self._path(tx_id), "w") as f:
-            json.dump([], f)
+        atomic_json_dump(self._path(tx_id), [])
 
     def exists(self, tx_id: str) -> bool:
         return os.path.exists(self._path(tx_id))
 
     def _path(self, tx_id: str) -> str:
-        return os.path.join(self.base_dir, f"{tx_id}.json")
+        validate_tx_id(tx_id)
+        return str(safe_json_path(self.base_dir, tx_id))

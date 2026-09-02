@@ -28,3 +28,23 @@ def test_eval_v2_is_bounded_provenance_aware_and_pair_safe():
     assert report["tamper"]["recall"] == 1.0
     assert report["semantic"]["tp"] + report["semantic"]["fn"] == 21
     assert report["n_evaluated"] == 78
+
+
+def test_legitimate_revisions_are_distinct_control_scenarios():
+    rows = build_eval_v2_rows()
+    revisions = [row for row in rows if row["label"] == "legitimate-revision"]
+    assert len(revisions) == 8
+    assert all(row["revision_observed"] is True for row in revisions)
+    assert len({row["revision_type"] for row in revisions}) == len(revisions)
+    messages = {
+        next(turn["message"] for turn in row["transcript"] if turn["speaker"] == "merchant_agent") for row in revisions
+    }
+    assert len(messages) == len(revisions)
+
+
+def test_holdout_is_disjoint_from_blind_challenge_split():
+    rows = build_eval_v2_rows()
+    in_scope = [row for row in rows if row.get("scope", "in_scope") != "out_of_scope"]
+    holdout = stratified_holdout_ids(in_scope, fraction=0.2, min_per_label=2, excluded_splits={"blind_challenge"})
+    blind = {row["tx_id"] for row in rows if row.get("split") == "blind_challenge"}
+    assert holdout.isdisjoint(blind)

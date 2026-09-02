@@ -118,6 +118,37 @@ async def log_result(state: SelfPlayState) -> dict:
     store.save_round(state["round_num"], all_results)
 
     missed = sum(1 for r in state["results"] if r["attack_success"])
+    if missed and state.get("tx_ids"):
+        # Self-play may propose a pattern, but activation is gated against the
+        # frozen benign controls and only occurs when the candidate matches the
+        # missed payload. This keeps the loop defense-only and reproducible.
+        from warden.agents.pattern_synthesizer import version_bump
+        from warden.detection.injection_scanner import BENIGN_NEGATIVE_SET
+        from warden.storage.transcript_store import TranscriptStore
+
+        transcript = TranscriptStore().load(state["tx_ids"][-1])
+        # Only merchant text actually delivered in the missed transaction may
+        # seed a pattern. The attacker's strategy/prompt is not evidence.
+        missed_messages = [
+            str(turn.get("message", ""))
+            for turn in (transcript or [])
+            if turn.get("speaker") == "merchant_agent" and turn.get("message")
+        ]
+        controls = list(BENIGN_NEGATIVE_SET)
+        try:
+            from warden.eval.fixtures import paired_semantic_fixtures
+
+            for fixture in paired_semantic_fixtures():
+                if fixture.get("label") == "clean":
+                    controls.extend(
+                        str(turn.get("message", ""))
+                        for turn in fixture["transcript"]
+                        if turn.get("speaker") == "merchant_agent" and turn.get("message")
+                    )
+        except Exception:
+            pass
+        if missed_messages:
+            version_bump(missed_messages, control_messages=controls)
     return {"missed_attacks": state.get("missed_attacks", 0) + missed}
 
 

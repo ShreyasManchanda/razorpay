@@ -30,7 +30,7 @@ Everything else from both prior docs carries over unchanged because it checked o
 - **Track: 02 (AI Risk Manager).** Track 02's bar — *"a working detector, verifier or auto-responder for one class of loss, with measured precision and recall on a held-out test set... honest metrics including false-positive cost... strictly defense-only"* — is a near-verbatim description of what Warden is. Confirmed against the live buildathon page. Not re-litigating this.
 - **Deliverable format: public GitHub repo + 5-minute pitch video + architecture doc, then a panel interview only if shortlisted.** The bounded live surface is an additional buildathon-demo path; it does not change the recorded benchmark contract.
 - **Class of loss:** agent-to-agent transactions that pass mandate/signature verification but were obtained dishonestly — via structural prompt injection in merchant free-text, or manipulative reasoning drift in the buyer agent.
-- **Timeline:** today is Aug 22, 2026; applications close Sep 5 — roughly two weeks.
+- **Timeline:** current working date is Sep 1, 2026; applications close Sep 5.
 
 ---
 
@@ -85,7 +85,7 @@ warden/
 ├── .env.example
 ├── patterns/
 │   ├── v1.json
-│   └── v2.json                 # produced by self-play; hand-edit only as the documented fallback (§11)
+│   └── v2.json                 # versioned detector artifact; activated only after registry gates (§11)
 ├── keys/
 │   └── .gitkeep                 # generated Ed25519 keys land here, gitignored entirely
 ├── data/
@@ -118,7 +118,8 @@ warden/
 │   ├── detection/
 │   │   ├── constraint_checker.py
 │   │   ├── drift_scorer.py
-│   │   └── injection_scanner.py    # v1 regex + v2 corroboration call
+│   │   ├── injection_scanner.py    # normalized two-tier scanner
+│   │   └── pattern_registry.py     # validated versioned detector artifacts
 │   ├── policy/
 │   │   ├── policy_config.py
 │   │   └── verdict.py
@@ -127,6 +128,7 @@ warden/
 │   ├── storage/
 │   │   ├── transcript_store.py
 │   │   ├── verdict_store.py
+│   │   ├── path_utils.py           # strict transaction-id validation
 │   │   └── selfplay_store.py
 │   ├── eval/
 │   │   ├── testset_builder.py       # THREE generation paths — see §10
@@ -296,18 +298,21 @@ run_warden       (subgraph: warden_graph)
 log_result       (labels this transcript: success = attack reached PASS or an approved STEPUP;
   │               catch = REJECT or a rejected STEPUP)
   ↓
-route(round_complete?)
-  │
-  ├── more rounds in this batch ──→ back to attacker_propose
-  │
-  └── round done ──→ pattern_synthesizer (only if this round had missed attacks)
+round done ──→ pattern_synthesizer (only if this round had missed attacks)
                             ↓
                     version_bump_patterns (patterns/v{n+1}.json)
                             ↓
-                           END  (or loop into the next round batch)
+                           END
 ```
 
-Compile `negotiation_graph` and `warden_graph` once each; invoke them as compiled subgraphs from `run_negotiation` / `run_warden` rather than re-defining their logic. `log_result` is also your eval-data writer for `injected` and `gradual-drift` rows in `data/eval/testset.jsonl` (§10) — but **not** for `clean` or `legitimate-revision` rows, which don't come through this loop at all (Fix #2/#3, detailed in §10).
+Compile `negotiation_graph` and `warden_graph` once each; invoke them as
+compiled subgraphs from `run_negotiation` / `run_warden` rather than
+re-defining their logic. The current implementation performs one bounded round
+per graph invocation; batch orchestration and complete holdout regression are
+external concerns, not an online loop. `log_result` is also the eval-data
+writer for `injected` and `gradual-drift` rows in `data/eval/testset.jsonl`
+(§10) — but **not** for `clean` or `legitimate-revision` rows, which don't
+come through this loop at all (Fix #2/#3, detailed in §10).
 
 ---
 
@@ -426,15 +431,28 @@ The current bounded benchmark is `eval-v2`: 80 deterministic cases, 78 in
 scope, with clean/legitimate controls, delivered injection and drift attacks,
 constraint violations, signature tampering, edge-case carts, and paired
 controls. Multilingual injection is retained as an out-of-scope probe and is
-not included in headline metrics. The grouped holdout is deterministic and
-keeps each pair together; no detector rule may be tuned against it.
+not included in headline metrics. The grouped holdout is deterministic,
+contains 22 rows, keeps each pair together, and excludes the 16-row blind
+challenge tranche; no detector rule may be tuned against either held-out
+partition.
 
 **Metrics reported (the actual upgrade over a bare precision/recall table):**
 - Semantic precision, recall, F1, and 95% confidence intervals for delivered `injected` + `gradual-drift` cases. A REJECT caused only by a constraint is not a semantic catch.
 - False-positive rate specifically on `clean` + `legitimate-revision`, with its confidence interval and denominator.
 - Constraint recall and signature/tamper recall reported independently from semantic detection.
+- Operational PASS/STEPUP/REJECT outcomes are reported separately, with
+  explicit false-pass, false-stepup, false-reject, unscored dependency counts,
+  and a cost-weighted false-positive total. ERROR/UNKNOWN outcomes are never
+  silently treated as successful catches or clean true negatives.
 - Every unverified attack attempt and every blind-challenge miss is listed, not silently counted as a successful attack or removed from the denominator.
 - A one-line cost model justifying the chosen operating threshold: a false REJECT costs one lost legitimate sale; a false PASS on an `injected`/`gradual-drift` case costs the manipulation getting through. State which you weighted more heavily (for a payments risk product, false PASS is usually the more expensive error) and set `injection_action`/thresholds accordingly.
+
+The current artifact reports 71.43% overall semantic recall, 100% grouped-
+holdout semantic recall, and 25% blind-challenge semantic recall (2/8). The
+blind result is the more important generalization warning and must be shown in
+the pitch. Operationally, the all-data report has 4 false passes, 5 false
+STEPUPs, 0 false rejects, and a weighted cost of 714.29 per 1,000 scored
+transactions under the documented weights.
 
 **Defense-only compliance — put this in the README verbatim:**
 > AttackerAgent is a closed internal component with no external interface. It only ever targets our own Buyer/Merchant agents inside the self-play loop, purely to generate labeled test-set data and harden InjectionScanner. It is never exposed as a callable capability, never targets a third party, and produces no artifact usable to attack a system outside this project.
@@ -496,7 +514,7 @@ POST /policy/swap                → re-run policy_decision on an existing tx_id
                                     signals and policy are stored separately
 POST /stepup/{tx_id}/resume      → {"approved": bool} → Command(resume=...) on the paused graph thread
 GET  /selfplay/report             → held-out precision/recall/F1/FPR table, all-data diagnostics, and attack-success-rate-by-round series
-GET  /evaluation/report          → validated immutable eval-v2 artifact (80 corpus / 78 in scope / 27 holdout)
+GET  /evaluation/report          → validated immutable eval-v2 artifact (80 corpus / 78 in scope / 22-row holdout; blind challenge excluded)
 ```
 
 Live turn classification is intentionally conservative. Generic affirmations
@@ -579,11 +597,23 @@ Format confirmed: **public repo + 5-minute video + architecture doc**, then a pa
 
 ## 17. Adversarial self-play — the loop, and its honesty boundary
 
-Same mechanics throughout: AttackerAgent (with `attack_type`) → log attempts → PatternSynthesizer proposes InjectionScanner rules from missed attacks → re-test against the new version → version bump (`patterns/v{n+1}.json`). This loop is also how the `injected`/`gradual-drift` slices of the §10 test set get built — one loop, two outputs: a harder detector and a graded eval set.
+Each self-play invocation runs one bounded AttackerAgent (with `attack_type`) →
+negotiation → Warden evaluation round, logs the delivered result, and may pass
+merchant-output evidence from a miss to PatternSynthesizer. Candidate rules
+are validated, deduplicated, checked against the miss and frozen benign
+controls, then written as a monotonic versioned registry artifact. The current
+implementation does not claim an automatic multi-round regression loop over
+the complete holdout; generated patterns remain offline, reviewable defensive
+artifacts. The same self-play machinery builds the `injected`/`gradual-drift`
+slices of the §10 test set.
 
 **Honesty boundary:** offline, re-test-gated, not live/online learning. State this before a technical panel asks.
 
-**Fallback if the automated PatternSynthesizer doesn't make it in time:** hand-author round 2's pattern additions based on what round 1 missed, and still show the attack-success-rate-declining chart, labeled honestly as a manually-curated hardening round. A partial, honestly-labeled claim beats a missing chart.
+**Current limitation:** the repository includes the deterministic synthesizer,
+registry validation, and candidate gates, but not an automatic multi-round
+attack-success-rate chart. If a later submission adds that loop, report the
+before/after result against untouched data; do not infer improvement from the
+single-round candidate proposal alone.
 
 ---
 

@@ -51,6 +51,10 @@
     reviewPreparing: false,
     reviewPrepared: false,
     policyRequestId: 0,
+    turnQueue: Promise.resolve(),
+    queuedTurns: 0,
+    turnEpoch: 0,
+    fallbackRun: 0,
   };
 
   async function jsonRequest(url, options = {}) {
@@ -115,6 +119,10 @@
   }
 
   function clearTranscript(message = "") {
+    state.turnEpoch += 1;
+    state.fallbackRun += 1;
+    state.turnQueue = Promise.resolve();
+    state.queuedTurns = 0;
     $("turn-log").replaceChildren();
     state.renderedTurns = 0;
     if (message) {
@@ -145,16 +153,31 @@
     copy.textContent = turn.message || "";
     header.append(speaker, action);
     article.append(header, copy);
+    if (animate) article.classList.add("turn--entering");
     $("turn-log").append(article);
     state.renderedTurns += 1;
     $("turn-log").scrollTop = $("turn-log").scrollHeight;
-    if (animate && gsapReady && !reducedMotion) {
-      window.gsap.fromTo(article, { opacity: 0, y: 10, scale: 0.985 }, { opacity: 1, y: 0, scale: 1, duration: 0.26, ease: "power2.out" });
-    }
   }
 
   function appendNewTurns(transcript, animate = true) {
-    transcript.slice(state.renderedTurns).forEach((turn) => appendTurn(turn, animate));
+    const start = state.renderedTurns + state.queuedTurns;
+    const turns = transcript.slice(start);
+    if (!turns.length) return Promise.resolve();
+    if (!animate || reducedMotion) {
+      turns.forEach((turn) => appendTurn(turn, animate));
+      return Promise.resolve();
+    }
+    const epoch = state.turnEpoch;
+    state.queuedTurns += turns.length;
+    state.turnQueue = state.turnQueue.then(async () => {
+      for (const turn of turns) {
+        if (epoch !== state.turnEpoch) return;
+        state.queuedTurns -= 1;
+        appendTurn(turn, true);
+        await new Promise((resolve) => setTimeout(resolve, 420));
+      }
+    });
+    return state.turnQueue;
   }
 
   function graphPath(values) {
@@ -258,13 +281,13 @@
 
   function paymentCopy(frame, live = false) {
     if (live) {
-      if (frame.verdict === "REJECT") return "No payment / blocked";
-      if (frame.verdict === "STEPUP") return "No payment / held for review";
-      if (frame.decision_state === "final") return "Authorized; no payment requested";
-      return "No payment requested in live session";
+      if (frame.verdict === "REJECT") return "Razorpay order blocked";
+      if (frame.verdict === "STEPUP") return "Razorpay held for review";
+      if (frame.decision_state === "final") return "Authorized; order not requested";
+      return "Razorpay order not requested";
     }
-    const map = { demo_order_created: "Mock order created", awaiting_review: "No payment / held for review", blocked: "No payment / blocked", not_requested: "No payment requested" };
-    return map[frame.payment_state] || "Not requested";
+    const map = { demo_order_created: "Razorpay test order created", awaiting_review: "Razorpay held for review", blocked: "Razorpay order blocked", not_requested: "Razorpay order not requested" };
+    return map[frame.payment_state] || "Razorpay order not requested";
   }
 
   function renderEvidence(frame, { animate = true, live = false } = {}) {
@@ -320,13 +343,13 @@
     $("playback-progress").style.transform = "scaleX(0)";
     const frames = state.replay.frames;
     $("exchange-count").textContent = `Exchange 0 / ${frames.length}`;
-    if (reducedMotion || !gsapReady) {
-      const finalFrame = frames.at(-1);
-      renderFrameTurns(finalFrame);
-      renderEvidence(finalFrame, { animate: false });
-      $("exchange-count").textContent = `Exchange ${frames.length} / ${frames.length}`;
-      $("playback-progress").style.transform = "scaleX(1)";
-      setPlayButton(false);
+    if (reducedMotion) {
+      // Reduced-motion users still get the evidence in order; only visual transforms are removed.
+      runFallbackReplay(frames, autoplay, false);
+      return;
+    }
+    if (!gsapReady) {
+      runFallbackReplay(frames, autoplay, true);
       return;
     }
     const timeline = window.gsap.timeline({
@@ -356,6 +379,31 @@
       timeline.pause(0);
       setPlayButton(false);
     }
+  }
+
+  async function runFallbackReplay(frames, autoplay = true, animateTurns = true) {
+    const runId = ++state.fallbackRun;
+    const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const isCurrent = () => runId === state.fallbackRun && state.mode === "replay";
+    state.playing = autoplay;
+    setPlayButton(autoplay);
+    if (!autoplay) return;
+    let priorCount = 0;
+    for (const [index, frame] of frames.entries()) {
+      if (!isCurrent()) return;
+      const newTurns = frame.transcript.slice(priorCount);
+      for (const turn of newTurns) {
+        appendTurn(turn, animateTurns);
+        await pause(turn.speaker === "buyer_agent" ? 480 : 620);
+        if (!isCurrent()) return;
+      }
+      renderEvidence(frame, { animate: animateTurns });
+      $("exchange-count").textContent = `Exchange ${index + 1} / ${frames.length}`;
+      $("playback-progress").style.transform = `scaleX(${(index + 1) / frames.length})`;
+      priorCount = frame.transcript.length;
+      await pause(index === frames.length - 1 ? 900 : 680);
+    }
+    if (isCurrent()) setPlayButton(false);
   }
 
   async function loadCase(index, { autoplay = true } = {}) {
@@ -505,8 +553,10 @@
   function applyLiveSnapshot(snapshot) {
     state.liveSnapshot = snapshot;
     state.liveSessionId = snapshot.session_id;
-    appendNewTurns(snapshot.transcript || []);
-    renderEvidence(liveFrame(snapshot), { live: true });
+    const exchange = appendNewTurns(snapshot.transcript || []);
+    exchange.then(() => {
+      if (state.liveSnapshot === snapshot && state.mode === "live") renderEvidence(liveFrame(snapshot), { live: true });
+    });
     $("conversation-title").textContent = `Sabziwala session ${snapshot.session_id.slice(-6)}`;
     $("case-position").textContent = `${snapshot.turn_count} buyer turns`;
     $("live-form").hidden = false;
@@ -646,12 +696,12 @@
 
   async function runTamper() {
     $("run-tamper").disabled = true;
-    $("tamper-result").textContent = "Signing Rs.90, changing one field, then verifying the original signature…";
+    $("tamper-result").textContent = "Signing Rs.90, changing one field, then checking the order gate…";
     try {
       const result = await jsonRequest("/tamper/check", { method: "POST" });
       $("tamper-verdict").textContent = result.verdict;
       $("tamper-verdict").dataset.state = result.verdict.toLowerCase();
-      $("tamper-result").textContent = `${result.explanation} Semantic detectors ran: ${result.detectors_ran}. Payment created: ${result.payment_created}.`;
+      $("tamper-result").textContent = `${result.explanation} Detectors ran: ${result.detectors_ran}. Razorpay order created: ${result.payment_created}.`;
       if (gsapReady && !reducedMotion) window.gsap.fromTo($("tamper-verdict"), { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.36, ease: "back.out(1.4)" });
     } catch (error) {
       $("tamper-result").textContent = `Tamper proof failed to run: ${error.message}`;
@@ -675,7 +725,7 @@
       const result = await jsonRequest(`/replays/${encodeURIComponent(DRIFT_CASE_ID)}/review`, { method: "POST" });
       state.reviewTxId = result.tx_id;
       $("review-id").textContent = result.tx_id;
-      $("review-copy").textContent = "Trust crossed 0.45 while the cart stayed inside hard constraints. Payment is paused at a real LangGraph checkpoint.";
+      $("review-copy").textContent = "Trust crossed 0.45 while the cart stayed inside hard constraints. Razorpay order creation is paused at a durable human-review checkpoint.";
       document.querySelectorAll("[data-review]").forEach((button) => { button.disabled = false; });
     } catch (error) {
       $("review-state").textContent = "UNAVAILABLE";
@@ -706,26 +756,39 @@
   }
 
   function renderEvaluation(report, animate = false) {
-    const metrics = report.holdout.semantic;
+    const metrics = report.all.semantic;
+    const holdout = report.holdout.semantic;
+    const operational = report.all.operational || {};
+    const cost = operational.false_positive_cost || {};
     const targets = {
-      "holdout-recall": [metrics.recall * 100, (value) => `${value.toFixed(1)}%`],
+      "overall-recall": [metrics.recall * 100, (value) => `${value.toFixed(1)}%`],
       precision: [metrics.precision * 100, (value) => `${value.toFixed(0)}%`],
       f1: [metrics.f1 * 100, (value) => `${value.toFixed(1)}%`],
       fpr: [metrics.fpr * 100, (value) => `${value.toFixed(1)}%`],
-      "holdout-n": [report.holdout.n_evaluated, (value) => `${Math.round(value)}`],
+      "grouped-recall": [holdout.recall * 100, (value) => `${value.toFixed(1)}%`],
+      "operational-fpr": [operational.fpr * 100, (value) => `${value.toFixed(1)}%`],
+      "false-pass": [operational.false_pass || 0, (value) => `${Math.round(value)}`],
+      "false-stepup": [operational.false_stepup || 0, (value) => `${Math.round(value)}`],
+      "weighted-cost": [cost.per_1000_transactions || 0, (value) => `${value.toFixed(2)}`],
     };
     Object.entries(targets).forEach(([key, [target, formatter]]) => {
       const element = document.querySelector(`[data-eval="${key}"]`);
       if (animate) animateNumber(element, target, formatter, 0.8);
       else { element.dataset.value = "0"; element.textContent = formatter(target); }
     });
-    $("recall-ci").textContent = `95% CI ${percent(metrics.recall_95_ci[0], 1)} to ${percent(metrics.recall_95_ci[1], 1)}`;
+    $("recall-ci").textContent = `95% CI (overall) ${percent(metrics.recall_95_ci[0], 1)} to ${percent(metrics.recall_95_ci[1], 1)}`;
+    $("recall-summary").textContent = `Warden caught ${metrics.tp} of ${metrics.tp + metrics.fn} delivered injection and drift attacks. The ${metrics.fn} misses remain included.`;
+    $("operational-explainer").textContent = `The figures above score detector signals. Final-action metrics also count an unnecessary STEPUP as a false intervention, even when no detector falsely labeled an attack. That stricter usability test produces ${percent(operational.fpr, 1)} intervention FPR instead of ${percent(metrics.fpr, 1)}.`;
     $("constraint-result").textContent = `${report.all.constraint.caught}/${report.all.constraint.n}`;
     $("tamper-result-eval").textContent = `${report.all.tamper.caught}/${report.all.tamper.n}`;
     const blindTotal = report.blind_challenge.semantic.tp + report.blind_challenge.semantic.fn;
     $("blind-result").textContent = `${report.blind_challenge.semantic.tp}/${blindTotal}`;
     $("miss-result").textContent = `${report.blind_challenge.semantic.fn} retained`;
-    $("eval-meta").textContent = `${report.corpus.n} total cases, ${report.scope.in_scope_n} in scope, ${report.holdout.n_evaluated} grouped holdout rows. Dataset ${report.dataset_version}.`;
+    $("holdout-label").textContent = `Grouped holdout recall · ${report.holdout.n_evaluated} rows`;
+    $("operational-scope").textContent = `Final verdicts across ${operational.n_attacks} delivered attacks and ${operational.n_controls} clean controls.`;
+    $("cost-model").textContent = `Cost model: false PASS = ${cost.false_pass_cost} points, false REJECT = ${cost.false_reject_cost}, unnecessary STEPUP = ${cost.false_stepup_cost}.`;
+    $("scope-copy").textContent = `This is a bounded English/electronics capability test, not a production-prevalence estimate. The ${report.holdout.n_evaluated}-row grouped holdout excludes the untouched ${report.blind_challenge.n_evaluated}-row blind challenge; blind performance is shown separately because it reveals the current detector’s weakest surface.`;
+    $("eval-meta").textContent = `${report.corpus.n} total cases · ${report.scope.in_scope_n} in scope · ${report.holdout.n_evaluated} grouped holdout · ${report.blind_challenge.n_evaluated} blind challenge`;
     const labels = { clean: "Clean", constraint: "Constraint", "gradual-drift": "Drift", injected: "Injection", "legitimate-revision": "Legit revision", tamper: "Tamper" };
     const tones = { clean: "pass", constraint: "reject", "gradual-drift": "stepup", injected: "reject", "legitimate-revision": "pass", tamper: "reject" };
     $("corpus-bar").replaceChildren();
@@ -807,8 +870,8 @@
   async function verifyScenario() {
     const scenarios = await jsonRequest("/scenarios");
     const selected = scenarios.find((scenario) => scenario.is_default);
-    if (selected?.id !== "sabziwala_vs_mom") throw new Error(`Expected sabziwala_vs_mom, received ${selected?.id || "none"}`);
-    $("scenario-proof").textContent = `Scenario: ${selected.id} / default confirmed`;
+    if (selected?.id !== "sabziwala_vs_mom") throw new Error("Required market scenario is not active");
+    $("scenario-proof").textContent = "Market scenario verified · server evidence active";
   }
 
   function bindEvents() {
@@ -842,7 +905,7 @@
         setTimeout(() => { $("copy-mcp").textContent = "Copy run command"; }, 1800);
       } catch {
         $("copy-mcp").textContent = "Copy unavailable";
-        $("copy-mcp").title = MCP_COMMAND;
+        $("copy-mcp").title = "Clipboard access is unavailable in this browser";
       }
     });
     document.querySelectorAll("[data-review]").forEach((button) => button.addEventListener("click", () => {

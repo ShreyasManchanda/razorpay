@@ -35,13 +35,24 @@ Avoid generic SaaS dashboards, fabricated metrics or dialogue, glass panels outs
 - Warden verifies the merchant CartMandate signature. Buyer IntentMandate signing and open key registration are not claimed.
 - The MCP adapter is real stdio transport, not full A2A relay, Agent Card, or protocol conformance.
 - Headline evaluation is the bounded `eval-v2` corpus: 80 deterministic cases,
-  78 in scope, with a 27-row grouped holdout. It is useful detector capability
-  evidence, not a production-prevalence benchmark or production-readiness claim.
-- Current eval-v2 semantic recall is 71.4% overall and 70.0% on holdout; known
-  blind-challenge recall is only 25% (2/8). Known misses are retained in the
-  report rather than hidden; these figures do not establish production readiness.
+  78 in scope, with a 22-row grouped holdout that excludes the 16-row blind
+  challenge. It is useful detector capability evidence, not a
+  production-prevalence benchmark or production-readiness claim.
+- Current eval-v2 semantic recall is 71.4% overall and 100% on the grouped
+  holdout; blind-challenge recall is only 25% (2/8). Operational metrics now
+  separate PASS/STEPUP/REJECT outcomes, unscored dependency failures, and
+  cost-weighted false positives. Known misses remain in the report rather
+  than being hidden; these figures do not establish production readiness.
+- At the documented operating weights, the all-data report records 4 false
+  passes, 5 false STEPUPs, 0 false rejects, and weighted cost of 714.29 per
+  1,000 scored transactions. The blind tranche costs 2,625 per 1,000 because
+  its unseen attacks are intentionally difficult; this is the key limitation
+  to discuss with judges.
 - Multilingual injection is explicitly out of scope for the current product
   claim and remains only as a tracked future probe.
+- Self-play hardening is offline and bounded to one graph invocation at a time;
+  candidate patterns are gated artifacts, not online learning or an automatic
+  holdout-tuning loop.
 
 ## Design Principles
 

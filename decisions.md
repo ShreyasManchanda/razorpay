@@ -395,10 +395,11 @@ clarity without creating another navigation system or demo failure surface.
 
 **Decision:** Treat `data/eval_v2` as the current offline capability benchmark:
 80 deterministic cases, 78 in scope, paired controls, provenance-verified
-attacks, a grouped 27-row holdout, and separate semantic, constraint, and
-tamper metrics. Multilingual injection is retained as an explicitly out-of-
-scope probe. Do not describe these figures as production accuracy or
-production readiness.
+attacks, and a deterministic grouped 22-row holdout that excludes the blind
+challenge tranche. Semantic, operational, constraint, and tamper metrics stay
+separate. Multilingual injection is retained as an explicitly out-of-scope
+probe. Do not describe these figures as production accuracy or production
+readiness.
 
 **Rationale:** The original verdict-only corpus produced a misleading perfect
 score because constraint rejection masked semantic detection. Eval-v2 exposes
@@ -457,3 +458,40 @@ for item-level agreement evidence.
 Completing a live session from a keyword alone would reproduce the exact
 difference between identity and honest authorization that Warden exists to
 enforce.
+## D-037: Versioned detector registry and authorization-only degraded fallback
+
+**Status:** LOCKED
+**Date:** 2026-09-01
+
+**Decision:** InjectionScanner loads a validated, versioned pattern registry with
+safe built-in fallback; self-play candidates are activated only after compile,
+deduplication, and clean-fixture gates. If negotiation or a required detector
+dependency fails, `/negotiate` uses the side-effect-free authorization service,
+forces STEPUP when necessary, persists the degraded diagnosis, and never calls
+the Razorpay order path. Approval of that degraded review resolves
+authorization only; payment execution remains disabled.
+
+**Rationale:** A detector update must be auditable and reversible, while an
+outage must not silently cross the payment boundary or turn an UNKNOWN result
+into PASS. The fallback is deliberately honest and reviewable rather than
+pretending to have completed a live payment.
+
+---
+
+## D-038: Separate semantic and operational evaluation contracts
+
+**Status:** LOCKED
+**Date:** 2026-09-01
+
+**Decision:** The immutable eval-v2 report keeps semantic detector metrics,
+constraint/tamper strata, and operational verdict outcomes separate. The
+22-row deterministic grouped holdout excludes the 16-row blind challenge;
+ERROR/UNKNOWN rows are tracked as unscored, not counted as catches or clean
+true negatives. Reports include explicit false-pass/false-stepup/false-reject
+counts and cost per 1,000 transactions.
+
+**Rationale:** A high semantic score can hide payment-friction or dependency
+failures. Publishing both contracts gives judges the honest capability and
+the action-level risk picture without mixing distinct loss classes.
+
+---

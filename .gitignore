@@ -25,3 +25,16 @@ patterns/*.json
 node_modules/
 .tmp-*
 warden-server.*.log
+*.log
+
+# Local notes and generated review/demo artifacts
+bugs.md
+chat.md
+decisions.md
+warden-spec.md
+PROJECT_OWNER_GUIDE.md
+demo-readiness-review.html
+ui/project-guide.html
+
+# Large local demo capture
+scene.png

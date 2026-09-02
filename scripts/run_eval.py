@@ -318,6 +318,10 @@ async def write_report(round_results: list[dict] | None = None):
     print(f"Semantic F1 Score:  {train_metrics['semantic']['f1']}")
     print(f"Semantic FPR:       {train_metrics['semantic']['fpr']}")
     print(f"Unverified attack rows: {train_metrics['legacy_unverified_attack_rows']}")
+    operational = train_metrics["operational"]
+    print(f"Operational recall:  {operational['recall']}")
+    print(f"Operational FPR:     {operational['intervention_fpr']}")
+    print(f"False-positive cost: {operational['false_positive_cost']['total']}")
     print("Detector counts:", train_metrics["detector_counts"])
 
     print(f"\n--- Held-Out Only (n={holdout_metrics['n_evaluated']}) ---")
@@ -327,6 +331,10 @@ async def write_report(round_results: list[dict] | None = None):
     print(f"Semantic F1 Score:  {semantic_metrics['f1']}")
     print(f"Semantic FPR:       {semantic_metrics['fpr']}")
     print(f"Unverified attack rows excluded from semantic recall: {holdout_metrics['legacy_unverified_attack_rows']}")
+    holdout_operational = holdout_metrics["operational"]
+    print(f"Operational recall:  {holdout_operational['recall']}")
+    print(f"Operational FPR:     {holdout_operational['intervention_fpr']}")
+    print(f"False-positive cost: {holdout_operational['false_positive_cost']['total']}")
 
     if round_results:
         print("\n--- Self-play Hardening ---")
@@ -343,6 +351,13 @@ async def write_report(round_results: list[dict] | None = None):
             "semantic_positive_requires_attack_delivered": True,
             "constraint_only_rows_not_counted_as_semantic_catches": True,
             "holdout_strategy": "stratified_by_label_deterministic_hash",
+            "operational_intervention": "STEPUP_or_REJECT",
+            "operational_controls": ["clean", "legitimate-revision"],
+            "operational_false_positive_cost": {
+                "false_pass": 10.0,
+                "false_stepup": 1.0,
+                "false_reject": 3.0,
+            },
         },
         "selfplay": round_results or [],
         "complete_dataset": complete,

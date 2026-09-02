@@ -31,6 +31,19 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 LINE = "=" * 64
 
 
+async def request_json(client, method: str, path: str, **kwargs):
+    """Fail loudly on API errors so a recording never shows null verdicts."""
+
+    resp = await client.request(method, path, **kwargs)
+    if resp.status_code >= 400:
+        detail = resp.text[:300]
+        raise RuntimeError(f"{method} {path} returned HTTP {resp.status_code}: {detail}")
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise RuntimeError(f"{method} {path} returned non-JSON content") from exc
+
+
 def header(title):
     print(f"\n{LINE}\n{title}\n{LINE}")
 
@@ -57,7 +70,9 @@ def print_verdict(data):
 
 async def beat_clean_sabziwala(client):
     header("BEAT 1 — CLEAN RUN (Sabziwala vs Indian Mom, Hinglish)")
-    resp = await client.post(
+    data = await request_json(
+        client,
+        "POST",
         "/negotiate",
         json={
             "intent_text": "Buy tamatar aur pyaz under 150 rupees total, fresh quality only",
@@ -67,19 +82,19 @@ async def beat_clean_sabziwala(client):
             "scenario": "sabziwala_vs_mom",
         },
     )
-    data = resp.json()
     tx_id = data.get("tx_id")
     print_verdict(data)
-    t = await client.get(f"/transcripts/{tx_id}")
-    if t.status_code == 200:
-        print("\n  transcript:")
-        print_turns(t.json())
+    transcript = await request_json(client, "GET", f"/transcripts/{tx_id}")
+    print("\n  transcript:")
+    print_turns(transcript)
     return tx_id
 
 
 async def beat_clean_pass_payment(client):
     header("BEAT 2 — CLEAN ELECTRONICS PASS -> RAZORPAY TEST ORDER")
-    resp = await client.post(
+    data = await request_json(
+        client,
+        "POST",
         "/negotiate",
         json={
             "intent_text": "buy wireless earbuds under 3000 rupees",
@@ -89,20 +104,19 @@ async def beat_clean_pass_payment(client):
             "scenario": "electronics_store",
         },
     )
-    data = resp.json()
     print_verdict(data)
     tx_id = data.get("tx_id")
     if data.get("verdict") == "PASS":
-        v = await client.get(f"/verdicts/{tx_id}")
-        if v.status_code == 200:
-            vd = v.json()
-            print(f"  order line: {vd.get('explanation', '')[-120:]}")
+        vd = await request_json(client, "GET", f"/verdicts/{tx_id}")
+        print(f"  order line: {vd.get('explanation', '')[-120:]}")
     return tx_id
 
 
 async def beat_injected(client):
     header("BEAT 3 — INJECTED CATALOG ATTACK -> REJECT")
-    resp = await client.post(
+    data = await request_json(
+        client,
+        "POST",
         "/negotiate",
         json={
             "intent_text": "buy wireless earbuds under 3000 rupees",
@@ -113,14 +127,15 @@ async def beat_injected(client):
             "scenario": "electronics_store",
         },
     )
-    data = resp.json()
     print_verdict(data)
     return data.get("tx_id")
 
 
 async def beat_drift_stepup_resume(client):
     header("BEAT 4 — GRADUAL DRIFT -> STEPUP -> HUMAN APPROVES -> PAYMENT")
-    resp = await client.post(
+    data = await request_json(
+        client,
+        "POST",
         "/negotiate",
         json={
             "intent_text": "buy wireless earbuds under 3000 rupees",
@@ -131,7 +146,6 @@ async def beat_drift_stepup_resume(client):
             "scenario": "electronics_store",
         },
     )
-    data = resp.json()
     tx_id = data.get("tx_id")
     print_verdict(data)
 
@@ -140,20 +154,19 @@ async def beat_drift_stepup_resume(client):
         return tx_id
 
     print(f"\n  resuming {tx_id} with approval=TRUE ...")
-    resume = await client.post(f"/stepup/{tx_id}/resume", json={"approved": True})
-    print(f"  post-resume verdict: {resume.json().get('verdict')}")
-    v = await client.get(f"/verdicts/{tx_id}")
-    if v.status_code == 200:
-        print(f"  final order line: {v.json().get('explanation', '')[-140:]}")
+    resume = await request_json(client, "POST", f"/stepup/{tx_id}/resume", json={"approved": True})
+    print(f"  post-resume verdict: {resume.get('verdict')}")
+    v = await request_json(client, "GET", f"/verdicts/{tx_id}")
+    print(f"  final order line: {v.get('explanation', '')[-140:]}")
     return tx_id
 
 
 async def beat_policy_swap(client):
     header("BEAT 5 — POLICY SWAP (same signals, different risk appetite)")
-    quick = await client.post("/policy/swap", json={"policy_name": "quick_commerce"})
-    b2b = await client.post("/policy/swap", json={"policy_name": "b2b_receivables"})
-    q = quick.json().get("results", [])
-    b = b2b.json().get("results", [])
+    quick = await request_json(client, "POST", "/policy/swap", json={"policy_name": "quick_commerce"})
+    b2b = await request_json(client, "POST", "/policy/swap", json={"policy_name": "b2b_receivables"})
+    q = quick.get("results", [])
+    b = b2b.get("results", [])
     flips = [
         {"tx_id": row["tx_id"], "quick_commerce": row["new"], "b2b": brow["new"]}
         for row, brow in zip(q, b, strict=False)

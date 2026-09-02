@@ -40,7 +40,13 @@ def split_holdout(tx_ids: list[str], holdout_modulo: int = 5) -> tuple[list[str]
     return train, holdout
 
 
-def stratified_holdout_ids(entries: list[dict], fraction: float = 0.2, min_per_label: int = 1) -> set[str]:
+def stratified_holdout_ids(
+    entries: list[dict],
+    fraction: float = 0.2,
+    min_per_label: int = 1,
+    *,
+    excluded_splits: set[str] | None = None,
+) -> set[str]:
     """Return a deterministic, label-stratified holdout.
 
     Rows with the same pair/scenario/attack family stay together when a
@@ -48,7 +54,10 @@ def stratified_holdout_ids(entries: list[dict], fraction: float = 0.2, min_per_l
     into training while its attack twin is in holdout.
     """
     groups: dict[str, list[dict]] = {}
+    excluded_splits = excluded_splits or set()
     for entry in entries:
+        if entry.get("split") in excluded_splits:
+            continue
         group = str(entry.get("group_id") or entry.get("pair_id") or entry.get("tx_id", ""))
         groups.setdefault(group, []).append(entry)
 
@@ -104,6 +113,64 @@ def detector_attribution(entry: dict) -> dict:
     }
 
 
+def operational_verdict_metrics(
+    entries: list[dict],
+    *,
+    attack_labels: tuple[str, ...] = ("injected", "gradual-drift"),
+    control_labels: tuple[str, ...] = ("clean", "legitimate-revision"),
+    false_pass_cost: float = 10.0,
+    false_stepup_cost: float = 1.0,
+    false_reject_cost: float = 3.0,
+) -> dict:
+    """Report action-level outcomes, with explicit false-positive costs.
+
+    Constraint and tamper labels are intentionally excluded: rejecting those
+    rows is the expected result of separate contracts, not an operational
+    false positive for semantic manipulation.
+    """
+    attacks = [e for e in entries if e.get("label") in attack_labels and e.get("attack_delivered") is True]
+    controls = [e for e in entries if e.get("label") in control_labels]
+    scored_verdicts = {"PASS", "STEPUP", "REJECT"}
+    scored_attacks = [e for e in attacks if e.get("verdict") in scored_verdicts]
+    scored_controls = [e for e in controls if e.get("verdict") in scored_verdicts]
+    attack_pass = sum(e.get("verdict") == "PASS" for e in scored_attacks)
+    attack_intervened = sum(e.get("verdict") in {"STEPUP", "REJECT"} for e in scored_attacks)
+    false_stepup = sum(e.get("verdict") == "STEPUP" for e in scored_controls)
+    false_reject = sum(e.get("verdict") == "REJECT" for e in scored_controls)
+    intervened_controls = false_stepup + false_reject
+    tp = attack_intervened
+    fp = intervened_controls
+    fn = attack_pass
+    tn = len(scored_controls) - fp
+    n = len(scored_attacks) + len(scored_controls)
+    cost = attack_pass * false_pass_cost + false_stepup * false_stepup_cost + false_reject * false_reject_cost
+    return {
+        **compute_precision_recall_f1(
+            [1] * len(scored_attacks) + [0] * len(scored_controls),
+            [1] * tp + [0] * fn + [1] * fp + [0] * tn,
+        ),
+        "n_attacks": len(attacks),
+        "n_attacks_scored": len(scored_attacks),
+        "n_attacks_unscored": len(attacks) - len(scored_attacks),
+        "n_controls": len(controls),
+        "n_controls_scored": len(scored_controls),
+        "n_controls_unscored": len(controls) - len(scored_controls),
+        "n_scored": n,
+        "attack_intervened": attack_intervened,
+        "false_pass": attack_pass,
+        "false_stepup": false_stepup,
+        "false_reject": false_reject,
+        "intervention_fpr": round(fp / len(scored_controls), 4) if scored_controls else 0.0,
+        "false_positive_cost": {
+            "false_pass_cost": false_pass_cost,
+            "false_stepup_cost": false_stepup_cost,
+            "false_reject_cost": false_reject_cost,
+            "total": round(cost, 4),
+            "per_1000_transactions": round(cost / n * 1000, 4) if n else 0.0,
+        },
+    }
+
+
 def evaluate_entries(entries: list[dict], *, holdout_ids: set[str] | None = None) -> dict:
     """Produce honest metrics with semantic and constraint strata separated.
 
@@ -122,7 +189,7 @@ def evaluate_entries(entries: list[dict], *, holdout_ids: set[str] | None = None
                 semantic_rows.append(e)
             else:
                 legacy_rows.append(e)
-        else:
+        elif label in ("clean", "legitimate-revision"):
             clean_rows.append(e)
 
     def binary(rows: list[dict], positive, prediction_key: str = "verdict_caught") -> dict:
@@ -151,6 +218,7 @@ def evaluate_entries(entries: list[dict], *, holdout_ids: set[str] | None = None
             "semantic": clean_semantic_false_positive,
             "total": len(clean_rows),
         },
+        "operational": operational_verdict_metrics(selected),
         "legacy_unverified_attack_rows": len(legacy_rows),
         "detector_counts": detector_counts,
         "verdict_counts": verdict_counts,

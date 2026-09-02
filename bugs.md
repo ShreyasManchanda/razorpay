@@ -16,7 +16,8 @@
 
 ## Confirmed Bugs
 
-(none yet)
+Historical confirmed bugs and their fixes are recorded below. New unresolved
+items are tracked under **Known Risks** until reproduced as defects.
 
 ---
 
@@ -41,9 +42,15 @@ The spec originally called for Sonnet-class reasoning because DriftScorer measur
 ### R-003: Injection scanner regex over-defense on benign merchant text
 
 **Severity:** P2
-**Likelihood:** Certain without v2 corroboration gate.
+**Likelihood:** Observed and bounded, not eliminated.
 
-Words like "required", "must", "mandatory" appear legitimately in merchant policy language ("ID required", "membership required"). The over-defense negative test set (§8.3) must include these cases from day one. v2 corroboration via Gemini Flash structured output is cheap enough to run on every flagged sentence.
+Words like "required", "must", and "mandatory" appear legitimately in
+merchant policy language. The scanner now keeps hard imperatives separate from
+suspicious STEPUP signals, normalizes common obfuscation, and runs against a
+frozen benign set. The current eval-v2 report still records five operational
+false STEPUPs overall, so this remains a measured friction risk rather than a
+claim of zero false positives. The optional LLM corroboration helper is not a
+required payment-path dependency and is not presented as a production gate.
 
 ### R-004: LangGraph parallel node execution order is nondeterministic
 
@@ -120,7 +127,11 @@ When building the warden graph with a MemorySaver checkpointer, every `ainvoke()
 **Severity:** P1
 **Status:** FIXED (two-tier approach)
 
-v1 regex had 13/14 false positive rate on the benign negative set. Fixed by splitting into two tiers: hard imperatives (still high FP, mitigated by v2 corroboration gate) and suspicious patterns (0/14 FP). Suspicious tier triggers STEPUP not REJECT, giving human reviewers visibility without blocking legitimate sales.
+v1 regex had 13/14 false positive rate on the benign negative set. Fixed by
+splitting into two tiers: hard imperatives and suspicious patterns. The
+validated registry now preserves the reviewed baseline and synthesized entries;
+suspicious patterns trigger STEPUP rather than REJECT, giving human reviewers
+visibility without blocking legitimate sales.
 
 ### R-015: Gradual drift could be bypassed by keeping price low
 
@@ -128,6 +139,37 @@ v1 regex had 13/14 false positive rate on the benign negative set. Fixed by spli
 **Status:** FIXED
 
 Policy layer only triggered STEPUP on gradual_drift when `cart_total > stepup_required_above`. Attacker could manipulate buyer into accepting a low-price item outside original intent without triggering any alert. Fixed: gradual_drift always STEPUPs regardless of amount.
+
+### R-016: Blind-challenge generalization gap
+
+**Severity:** P1
+**Likelihood:** Confirmed
+
+The untouched blind-challenge tranche catches only 2/8 semantic attacks (25%
+recall). The grouped holdout is intentionally separate and currently reports
+100% recall, so that result must not be presented as unseen-attack robustness.
+Blind misses remain in `data/eval_v2/report.json` and are the next detector-
+hardening target.
+
+### R-017: Self-play activation is bounded to one invocation
+
+**Severity:** P2
+**Likelihood:** Confirmed
+
+One self-play graph invocation runs one attacker/negotiation/warden round and
+may propose a versioned pattern. Candidate activation is compile-, dedupe-,
+miss-match-, and benign-control-gated, but a multi-round automatic regression
+loop over the complete frozen holdout is not yet implemented. Treat generated
+patterns as reviewed defensive artifacts, not online learning.
+
+### R-018: Demo persistence is process-local
+
+**Severity:** P2
+**Likelihood:** Confirmed by design
+
+The demo uses `MemorySaver` and flat JSON stores. Writes are atomic and HTTP
+transaction IDs are path-validated, but cross-process durability, locking, and
+multi-instance recovery require a database/checkpointer before production use.
 
 ### B-001: Structured-output parsing crashed evaluation runs
 
@@ -303,7 +345,12 @@ The frontend could only load stored verdicts, so a presenter could not ask the s
 
 `GET /selfplay/report` previously aggregated every stored row even though the offline evaluator reported a deterministic SHA-256 holdout. That made the UI's “held-out” claim unverifiable and hid the small, imbalanced current denominator.
 
-**Fix:** The API now reports the provenance-aware stratified holdout as the primary metric set, preserves verdict-only and all-data diagnostics separately, exposes the split rule and denominators, and documents the current 8/40 holdout in `data/eval/manifest.json`. Unverified legacy attack rows cannot inflate semantic recall; live sabziwala sessions are explicitly qualitative transfer evidence.
+**Fix:** The API now reports the provenance-aware stratified holdout as the
+primary metric set, preserves verdict-only and all-data diagnostics separately,
+exposes the split rule and denominators, and keeps the historical 8/40 legacy
+holdout distinct from the current eval-v2 artifact. Unverified legacy attack
+rows cannot inflate semantic recall; live sabziwala sessions are explicitly
+qualitative transfer evidence.
 
 ---
 
@@ -404,3 +451,21 @@ no explicit agreement.
 or equivalent finalization language. Regression tests distinguish ordinary
 questions from authorization, and the prepared three-turn demo remains
 provisional until its final explicit accept.
+
+---
+
+### B-022: Provider fallback could cross the payment boundary
+
+**Status:** FIXED
+**Severity:** P0
+**Found:** 2026-09-01
+
+When negotiation degraded, the request path could still reach the ordinary
+Warden graph and potentially execute payment before the response was rewritten
+to STEPUP.
+
+**Fix:** Degraded negotiation now uses the side-effect-free authorization
+service, persists a fail-closed STEPUP diagnosis, and never invokes the
+Razorpay order path. Its review endpoint resolves authorization only and keeps
+payment execution disabled. A regression test asserts that no order call is
+made on this path.

@@ -451,3 +451,27 @@ stdio round trip returned PASS with payment execution false, and cold HTTP smoke
 covered all four replay outcomes, policy swap, tamper rejection, immutable and
 disposable review paths, eval-v2, static assets, and the three-turn live PASS
 flow. The final server runs at `http://127.0.0.1:8000/`.
+
+## 2026-09-01: Post-push hardening and documentation sync
+
+After the latest push, the project was reviewed in parallel across evaluation,
+detector/self-play, and runtime/security surfaces; each implementation stream
+received an independent review. Follow-up fixes added a validated, versioned
+InjectionScanner registry, Unicode/zero-width/confusable normalization,
+conservative candidate gates, explicit operational metrics, strict
+transaction-ID validation, atomic JSON writes, bounded API inputs, and
+provider-degraded fail-closed behavior. A degraded STEPUP can now be resolved
+as authorization-only and cannot create a Razorpay order.
+
+The eval-v2 artifact is now explicitly 80 cases / 78 in scope / 22-row grouped
+holdout, with the 16-row blind challenge excluded from the holdout. Current
+semantic results are 71.43% recall overall, 100% on the grouped holdout, and
+25% on the blind challenge (2/8). Operational results record 4 false passes,
+5 false STEPUPs, 0 false rejects, and weighted cost of 714.29 per 1,000
+transactions overall. The blind tranche remains the main generalization gap,
+not a hidden failure.
+
+Final verification after the hardening pass: **190 tests passed**, Ruff lint
+and formatting checks passed, and `git diff --check` passed. README, PRODUCT,
+SPEC, frontend PRD, decisions, and bugs were synchronized with the current
+implementation. No commit or push was made by the agent.

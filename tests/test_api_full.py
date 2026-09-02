@@ -67,10 +67,12 @@ class TestAPIFull:
             "out_of_scope_cases": ["injection", "injection_control"],
         }
         assert data["all"]["n_evaluated"] == 78
-        assert data["holdout"]["n_evaluated"] == 27
+        assert data["holdout"]["n_evaluated"] == 22
         assert data["blind_challenge"]["n_evaluated"] == 16
         assert data["all"]["semantic"]["precision"] == 1.0
-        assert data["holdout"]["semantic"]["recall"] == 0.7
+        assert data["holdout"]["semantic"]["recall"] == 1.0
+        assert data["holdout"]["operational"]["n_attacks_unscored"] == 0
+        assert data["holdout"]["operational"]["false_positive_cost"]["total"] >= 0
 
     async def test_selfplay_report_exposes_holdout_scope(self, client, monkeypatch):
         from warden.eval.testset_builder import TestSetBuilder

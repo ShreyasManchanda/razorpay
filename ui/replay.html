@@ -9,9 +9,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/ui/warden.css?v=20260901.3">
+  <link rel="stylesheet" href="/ui/warden.css?v=20260902.3">
   <script src="/ui/vendor/gsap.min.js?v=3.12.5" defer></script>
-  <script src="/ui/warden.js?v=20260901.3" defer></script>
+  <script src="/ui/warden.js?v=20260902.3" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#architecture">Skip Live Studio</a>
@@ -23,7 +23,7 @@
     <div class="hero-shell">
       <header class="hero-heading">
         <div><p class="product-mark">Project Warden</p><h1 id="hero-title">Trust, before money moves.</h1></div>
-        <p>Identity proves who signed. Warden evaluates how the agreement was obtained.</p>
+        <p>Buyer and merchant agents negotiate independently. Warden checks consent before Razorpay receives an order.</p>
       </header>
 
       <article class="evidence-console glass" id="evidence-console" data-state="analysis" aria-label="Warden Live Studio">
@@ -51,7 +51,7 @@
 
             <form class="live-composer" id="live-form" hidden>
               <label for="live-message">Message the sabziwala</label>
-              <input id="live-message" name="message" maxlength="300" autocomplete="off" placeholder="Bargain, change the cart, or ask the sabziwala anything">
+              <input id="live-message" name="message" maxlength="300" autocomplete="off" placeholder="Bargain, change the cart, or ask the sabziwala anything…">
               <button class="icon-command" type="submit" aria-label="Send message" title="Send message">&#8593;</button>
             </form>
 
@@ -95,12 +95,12 @@
             </div>
             <div class="mandate-receipt">
               <div><span>Cart</span><strong id="cart-total">Rs.0</strong></div><div><span>Agreement</span><strong id="agreement-state">Pending buyer</strong></div>
-              <div><span>Policy</span><strong id="active-policy">Quick commerce</strong></div><div><span>Payment</span><strong id="payment-state">Not requested</strong></div>
+              <div><span>Policy</span><strong id="active-policy">Quick commerce</strong></div><div><span>Razorpay gate</span><strong id="payment-state">Order not requested</strong></div>
             </div>
             <div class="agreement-proof" id="agreement-proof"><span>Authorization evidence</span><p>Waiting for an explicit buyer accept tied to a named cart.</p></div>
           </aside>
         </div>
-        <footer class="console-footer"><span id="case-position">Case 1 of 4</span><span id="scenario-proof">Scenario: verifying…</span><button class="text-command" id="export-evidence" type="button" disabled>Download evidence JSON</button></footer>
+        <footer class="console-footer"><span id="case-position">Case 1 of 4</span><span id="scenario-proof">Market scenario verifying…</span><button class="text-command" id="export-evidence" type="button" disabled>Download evidence</button></footer>
       </article>
     </div>
   </section>
@@ -109,33 +109,18 @@
     <section class="section architecture" id="architecture" aria-labelledby="architecture-title">
       <div class="section-shell architecture-layout">
         <header class="section-lead architecture-lead">
-          <p class="section-index">The authorization gap</p><h2 id="architecture-title">The agreement is not the evidence.</h2>
+          <p class="section-index">The agent-commerce authorization gap</p><h2 id="architecture-title">The agreement is not the evidence.</h2>
           <p class="lead-copy">AP2, ACP, UPI-style mandates, and signed payment instructions can prove the right key authorized the final payload. They cannot prove the negotiation that produced it was honest.</p>
           <p>A merchant agent can place an instruction inside its own message history or gradually move the buyer away from its original goal. A valid signature at the end says nothing about that process. Warden evaluates the negotiation before payment execution, at the layer those protocols do not cover.</p>
           <div class="identity-contrast" role="group" aria-label="Identity verification compared with honest authorization"><div><span>Cryptography answers</span><strong>Who signed this exact cart?</strong></div><div><span>Warden answers</span><strong>Was consent obtained honestly?</strong></div></div>
           <div class="authorization-boundary" aria-label="Complete authorization boundary"><span>Complete authorization</span><strong>Valid identity</strong><i aria-hidden="true">+</i><strong>Honest consent</strong><i aria-hidden="true">=</i><b>Payment eligible</b></div>
         </header>
         <div class="system-route" role="region" aria-label="Warden authorization route">
-          <article class="route-stage"><span class="route-number">01</span><div><h3>Agent negotiation</h3><p>Buyer and merchant exchange structured offers, counters, accepts, and rejects. Every turn builds a transcript and a candidate cart in real time.</p></div><code>LangGraph turn loop</code></article>
-          <article class="route-stage"><span class="route-number">02</span><div><h3>Agreement extraction</h3><p>A merchant offer is not consent. Warden requires a buyer accept tied to named items or the nearest structured offer, and stores the exact evidence chain.</p></div><code>CartMandate.agreement_evidence</code></article>
+          <article class="route-stage"><span class="route-number">01</span><div><h3>Two agents negotiate</h3><p>A buyer agent and merchant agent exchange structured offers, counters, accepts, and rejects. Every turn builds a transcript and candidate cart in real time.</p></div><code>LangGraph turn loop</code></article>
+          <article class="route-stage"><span class="route-number">02</span><div><h3>Agreement extraction</h3><p>A merchant offer is not consent. Warden requires a buyer accept tied to named items or the nearest structured offer, and stores the exact evidence chain.</p></div><code>signed agreement evidence</code></article>
           <article class="route-stage route-stage--gate"><span class="route-number">03</span><div><h3>Ed25519 fail-closed gate</h3><p>One changed byte invalidates the signed cart. The transaction stops before interpretation, detector execution, or payment.</p></div><code>PyNaCl / Ed25519</code></article>
           <article class="route-stage route-stage--fanout"><span class="route-number">04</span><div class="fanout-copy"><h3>Three detectors run in parallel</h3><p>Different failure modes need different evidence, so deterministic rules, local embeddings, and structural scanning stay separate.</p></div><div class="fanout-branches"><div><strong>ConstraintChecker</strong><p>Arithmetic, categories, red lines, and buyer-agreement rules.</p></div><div><strong>DriftScorer</strong><p>MiniLM cosine similarity tracks reasoning against the original intent.</p></div><div><strong>InjectionScanner</strong><p>Hard agent-directed instructions and softer manipulation patterns.</p></div></div></article>
-          <article class="route-stage"><span class="route-number">05</span><div><h3>Policy, then payment</h3><p>Only the structured signal bundle reaches policy. PASS may call Razorpay Orders, STEPUP pauses for a person, and REJECT blocks payment.</p></div><code>pure policy(signal_bundle)</code></article>
-        </div>
-      </div>
-
-      <div class="section-shell boundary-lab" id="boundary-lab">
-        <div class="payload-proof" data-proof-kind="interactive">
-          <div class="proof-heading"><div><span>Fail-closed proof</span><h3>Tamper one field.</h3></div><button class="command-button command-button--danger" id="run-tamper" type="button">Run tamper check</button></div>
-          <div class="payload-diff" role="group" aria-label="Signed and tampered cart totals"><div><span>Signed payload</span><code>"total": <b>90</b></code></div><div><span>Modified payload</span><code>"total": <b>125</b></code></div><strong class="proof-verdict" id="tamper-verdict">NOT RUN</strong></div>
-          <p class="proof-result" id="tamper-result" aria-live="polite">The test signs Rs.90, changes the total, and verifies with the original signature.</p>
-        </div>
-        <div class="mcp-proof" data-proof-kind="contract">
-          <div class="proof-heading"><div><span>Integration surface</span><h3>One narrow MCP tool.</h3></div><button class="text-command" id="copy-mcp" type="button">Copy run command</button></div>
-          <div class="mcp-status" aria-label="MCP integration properties"><span>Transport</span><strong>stdio</strong><span>Tool surface</span><strong>1 bounded tool</strong></div>
-          <code class="tool-signature">warden_authorize_payment(<br>&nbsp;&nbsp;intent, signed_cart,<br>&nbsp;&nbsp;transcript, policy_name<br>) -&gt; PASS | STEPUP | REJECT</code>
-          <div class="contract-list"><span>Requires buyer agreement evidence</span><span>Uses the same authorization service as Live Studio</span><span>Never executes payment or resolves human review</span></div>
-          <p>This is a real stdio MCP adapter for integration, not a claim of full A2A protocol conformance or a new relay network.</p>
+          <article class="route-stage"><span class="route-number">05</span><div><h3>Policy, then Razorpay</h3><p>Only structured signals reach policy. PASS can create a Razorpay test order, STEPUP pauses for a person, and REJECT guarantees no order is created.</p></div><code>signals → verdict → payment gate</code></article>
         </div>
       </div>
     </section>
@@ -151,11 +136,31 @@
       <div class="review-console" data-state="loading"><div class="review-topline"><span>Disposable review transaction</span><strong id="review-id">Preparing checkpoint</strong></div><div class="review-decision"><strong id="review-state">STEPUP</strong><p id="review-copy">Creating an isolated copy of the Drift case for this decision.</p></div><div class="review-trajectory"><span class="review-threshold"></span><i style="--score:.71"></i><i style="--score:.68"></i><i style="--score:.74"></i><i style="--score:.67"></i><i class="crossed" style="--score:.26"></i><i style="--score:.32"></i></div><div class="review-reason"><span>Why not auto-reject?</span><p>The cart remains inside the Rs.150 hard limit. The risk is the buyer reasoning moving away from its original intent, which requires context.</p></div><div class="review-actions"><button class="command-button command-button--approve" type="button" data-review="approve" disabled>Approve payment</button><button class="command-button command-button--danger" type="button" data-review="reject" disabled>Reject &amp; abort</button><button class="text-command" id="reset-review" type="button">Reset review</button></div></div>
     </div></section>
 
+    <section class="section proof-section" id="proofs" aria-labelledby="proofs-title"><div class="section-shell">
+      <header class="section-lead proof-lead"><p class="section-index">Integration and execution proof</p><h2 id="proofs-title">A trust layer agents can call.</h2><p class="lead-copy">Warden sits between an agent-to-agent agreement and Razorpay order creation. Existing agents can submit the intent, signed cart, transcript, and policy through one bounded MCP authorization tool; they receive PASS, STEPUP, or REJECT before money moves.</p></header>
+      <div class="commerce-rail" aria-label="Agent commerce authorization flow"><strong>Buyer agent</strong><i aria-hidden="true">→</i><strong>Merchant agent</strong><i aria-hidden="true">→</i><b>Warden authorization</b><i aria-hidden="true">→</i><strong>Razorpay Orders</strong></div>
+      <div class="boundary-lab" id="boundary-lab">
+        <div class="mcp-proof" data-proof-kind="contract">
+          <div class="proof-heading"><div><span>Agent integration</span><h3>One narrow MCP tool.</h3></div><button class="text-command" id="copy-mcp" type="button">Copy launch command</button></div>
+          <div class="mcp-status" aria-label="MCP integration properties"><span>Connection</span><strong>Local MCP</strong><span>Authorization surface</span><strong>1 bounded tool</strong></div>
+          <code class="tool-signature">warden_authorize_payment(<br>&nbsp;&nbsp;buyer intent, signed cart,<br>&nbsp;&nbsp;conversation, policy<br>) → PASS | STEPUP | REJECT</code>
+          <div class="contract-list"><span>Requires explicit buyer agreement evidence</span><span>Uses the same authorization engine as Live Studio</span><span>Returns a decision without executing payment or bypassing human review</span></div>
+          <p>This makes Warden portable across agent frameworks without pretending to be a new agent-to-agent transport protocol.</p>
+        </div>
+        <div class="payload-proof" data-proof-kind="interactive">
+          <div class="proof-heading"><div><span>Razorpay execution boundary</span><h3>Tamper one field. No order.</h3></div><button class="command-button command-button--danger" id="run-tamper" type="button">Run tamper check</button></div>
+          <div class="payload-diff" role="group" aria-label="Signed and tampered cart totals"><div><span>Signed total</span><code>Rs.90</code></div><div><span>Changed total</span><code><b>Rs.125</b></code></div><strong class="proof-verdict" id="tamper-verdict">NOT RUN</strong></div>
+          <p class="proof-result" id="tamper-result" aria-live="polite">Warden verifies the signed cart before detectors or Razorpay. Changing one value invalidates the mandate and blocks order creation.</p>
+        </div>
+      </div>
+    </div></section>
+
     <section class="section evaluation-section" id="evaluation" aria-labelledby="evaluation-title"><div class="section-shell">
-      <header class="section-lead evaluation-lead"><p class="section-index">Bounded benchmark, visible limits</p><h2 id="evaluation-title">Evidence without a perfect-score story.</h2><p class="lead-copy">Eval-v2 contains paired clean controls, delivered attacks, constraint violations, and tampered carts. It is synthetic capability evidence, held apart from the demo transcript, with confidence intervals and known misses left visible.</p></header>
-      <div class="scoreboard" id="scoreboard"><div class="headline-metric"><span>Grouped holdout semantic recall</span><strong data-eval="holdout-recall">--</strong><small id="recall-ci">95% CI loading</small></div><div class="metric-strip"><div><span>Precision</span><strong data-eval="precision">--</strong></div><div><span>F1</span><strong data-eval="f1">--</strong></div><div><span>Observed FPR</span><strong data-eval="fpr">--</strong></div><div><span>Holdout rows</span><strong data-eval="holdout-n">--</strong></div></div></div>
-      <div class="evaluation-grid"><div class="corpus-breakdown"><h3>What was tested</h3><div class="corpus-bar" id="corpus-bar" aria-label="Evaluation corpus composition"></div><div class="corpus-legend" id="corpus-legend"></div><p id="eval-meta">Loading the immutable eval-v2 report…</p></div><div class="coverage-ledger"><h3>What the system caught</h3><div><span>Constraint violations</span><strong id="constraint-result">--</strong></div><div><span>Signature tampering</span><strong id="tamper-result-eval">--</strong></div><div><span>Blind semantic attacks</span><strong id="blind-result">--</strong></div><div class="known-gap"><span>Known blind misses</span><strong id="miss-result">--</strong></div></div><div class="scope-note"><h3>Claim boundary</h3><p>Current semantic coverage is strongest on the bounded English/electronics benchmark. Two multilingual injection probes remain explicitly out of scope. Blind-challenge recall is reported separately because it exposes where the current pattern and embedding surface still misses.</p></div></div>
-      <footer class="defense-note"><strong>Defense-only:</strong> the attacker component is internal to offline evaluation. It is not exposed through the API, Live Studio, or MCP tool.</footer>
+      <header class="section-lead evaluation-lead"><p class="section-index">Bounded benchmark, visible limits</p><h2 id="evaluation-title">Evidence without a perfect-score story.</h2><p class="lead-copy">The benchmark pairs ordinary negotiations with delivered attacks, constraint violations, and tampered carts. It is separate from the demo conversations, and known misses remain in the totals.</p></header>
+      <div class="scoreboard" id="scoreboard"><div class="headline-metric"><span>Overall attack recall · all in-scope semantic cases</span><strong data-eval="overall-recall">--</strong><small id="recall-ci">95% confidence interval loading</small><p id="recall-summary">Loading caught and missed attack counts…</p></div><div class="metric-strip" aria-label="Supporting semantic metrics"><div><span>Precision</span><strong data-eval="precision">--</strong><small>Flagged attacks that were real</small></div><div><span>F1 balance</span><strong data-eval="f1">--</strong><small>Precision and recall combined</small></div><div><span>Clean-control detector FPR</span><strong data-eval="fpr">--</strong><small>Benign talks flagged by detectors</small></div></div></div>
+      <div class="metric-explainer"><strong>Why the operational numbers differ</strong><p id="operational-explainer">Detector metrics and final-action metrics answer different questions. Loading the current comparison…</p></div>
+      <div class="evaluation-grid"><div class="corpus-breakdown"><h3>What was tested</h3><div class="corpus-bar" id="corpus-bar" aria-label="Evaluation corpus composition"></div><div class="corpus-legend" id="corpus-legend"></div><p id="eval-meta">Loading the benchmark report…</p></div><div class="coverage-ledger"><h3>Benchmark slices</h3><div><span id="holdout-label">Grouped holdout recall</span><strong data-eval="grouped-recall">--</strong></div><div><span>Constraint violations caught</span><strong id="constraint-result">--</strong></div><div><span>Signature tampering blocked</span><strong id="tamper-result-eval">--</strong></div><div><span>Blind attacks caught</span><strong id="blind-result">--</strong></div><div class="known-gap"><span>Blind attacks missed</span><strong id="miss-result">--</strong></div></div><div class="coverage-ledger operational-ledger"><h3>Operational reality</h3><p id="operational-scope">Loading final-verdict scope…</p><div><span>Intervention FPR</span><strong data-eval="operational-fpr">--</strong></div><div><span>Attacks incorrectly passed</span><strong data-eval="false-pass">--</strong></div><div><span>Clean talks sent to review</span><strong data-eval="false-stepup">--</strong></div><div><span>Weighted error points / 1,000</span><strong data-eval="weighted-cost">--</strong></div><small id="cost-model">Loading error-cost weights…</small></div><div class="scope-note"><h3>Claim boundary</h3><p id="scope-copy">This is a bounded capability test, not a production-prevalence estimate. Holdout and blind performance are separated so unseen weaknesses remain visible.</p></div></div>
+      <footer class="defense-note"><strong>Honest metrics include false-positive cost.</strong> <strong>Strictly defense-only:</strong> attack generation exists only for offline evaluation and is not exposed through Live Studio, the authorization API, or MCP integration.</footer>
     </div></section>
   </main>
 </body>

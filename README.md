@@ -94,17 +94,26 @@ with Warden.
 
 - **Negotiation graph**: Buyer ↔ Merchant agent turn loop through the budget-safe provider fallback chain
 - **Warden graph**: Signature gate → parallel detection (constraint, drift, injection) → merge → policy → verdict
-- **Selfplay graph**: Attacker proposes payload → negotiation runs → warden evaluates → results logged
+- **Selfplay graph**: Attacker proposes a bounded payload → negotiation runs →
+  Warden evaluates → delivered merchant evidence is logged → an optional
+  validated pattern proposal is gated before versioned activation
 
 See [SPEC.md](SPEC.md) for full architecture details and [decisions.md](decisions.md) for every locked decision.
+
+Detector hardening is offline and reviewable: self-play may propose a pattern
+from delivered merchant evidence, but the validated registry only activates a
+compiled, deduplicated candidate that matches the miss and passes frozen
+benign-control checks. This is a bounded one-round invocation, not online
+learning or automatic holdout tuning.
 
 ## Evaluation
 
 The authoritative bounded benchmark is `eval-v2`, not the original 40-row
 provider corpus. It uses 80 deterministic cases, 78 in-scope cases, paired
-controls, provenance-verified attacks, an immutable grouped holdout, and
-separate constraint/tamper metrics. Multilingual injection is retained as an
-out-of-scope probe and excluded from headline figures.
+controls, provenance-verified attacks, and a deterministic grouped holdout of
+22 rows. The holdout excludes the 16-row blind-challenge tranche entirely;
+the report records the overlap check and keeps constraint/tamper metrics
+separate. Multilingual injection remains an out-of-scope probe.
 
 Run it offline with the cached embedding model:
 
@@ -112,14 +121,15 @@ Run it offline with the cached embedding model:
 .venv\Scripts\python scripts\run_eval_v2.py
 ```
 
-Current bounded results: semantic precision 100%, recall 71.4%, F1 83.3%,
-and 0% observed false-positive rate (95% recall CI 50.0%–86.2%). The grouped
-holdout recall is 70.0% (95% CI 39.7%–89.2%). Constraints caught 7/7 and
-signature tampering caught 8/8. These are capability measurements on a small
-synthetic corpus, not production-prevalence estimates or a release guarantee.
-The untouched blind-challenge tranche is substantially harder: 25% semantic
-recall (2/8), with six misses. Those misses remain listed in
-`data/eval_v2/report.json` and are the priority for further hardening.
+Current bounded results are published verbatim in `data/eval_v2/report.json`:
+semantic precision 100%, overall recall 71.4%, grouped-holdout recall 100%,
+and the untouched blind-challenge tranche at 25% (2/8). The report also shows
+operational PASS/STEPUP/REJECT outcomes, unscored dependency failures, and a
+cost model that weights a false PASS more heavily than review friction.
+Constraints and signature tampering are reported independently. These are
+capability measurements on a small synthetic corpus, not production-
+prevalence estimates or a release guarantee; the blind misses remain visible
+and are the priority for further hardening.
 
 Run each class as its own rate-limit-friendly batch of ten:
 

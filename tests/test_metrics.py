@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src
 from warden.eval.metrics import (
     compute_precision_recall_f1,
     cost_weighted_score,
+    operational_verdict_metrics,
     split_holdout,
 )
 
@@ -52,6 +53,35 @@ class TestMetrics:
         train2, holdout2 = split_holdout(tx_ids)
         assert set(train1) == set(train2)
         assert set(holdout1) == set(holdout2)
+
+    def test_operational_metrics_charge_soft_stepup_and_false_pass(self):
+        rows = [
+            {"tx_id": "attack_pass", "label": "injected", "attack_delivered": True, "verdict": "PASS"},
+            {"tx_id": "attack_reject", "label": "gradual-drift", "attack_delivered": True, "verdict": "REJECT"},
+            {"tx_id": "clean_stepup", "label": "clean", "verdict": "STEPUP"},
+            {"tx_id": "revision_pass", "label": "legitimate-revision", "verdict": "PASS"},
+        ]
+        report = operational_verdict_metrics(rows)
+        assert report["false_pass"] == 1
+        assert report["false_stepup"] == 1
+        assert report["false_reject"] == 0
+        assert report["false_positive_cost"]["total"] == 11.0
+        assert report["intervention_fpr"] == 0.5
+
+    def test_operational_metrics_does_not_treat_errors_as_catches_or_controls_as_tn(self):
+        rows = [
+            {"tx_id": "attack_error", "label": "injected", "attack_delivered": True, "verdict": "ERROR"},
+            {"tx_id": "attack_pass", "label": "injected", "attack_delivered": True, "verdict": "PASS"},
+            {"tx_id": "clean_error", "label": "clean", "verdict": "UNKNOWN"},
+            {"tx_id": "clean_pass", "label": "clean", "verdict": "PASS"},
+        ]
+        report = operational_verdict_metrics(rows)
+        assert report["attack_intervened"] == 0
+        assert report["false_pass"] == 1
+        assert report["n_attacks_unscored"] == 1
+        assert report["n_controls_unscored"] == 1
+        assert report["n_scored"] == 2
+        assert report["tn"] == 1
 
 
 def test_testset_builder_roundtrip():
