@@ -1,6 +1,13 @@
+import os
 import re
 
 import numpy as np
+
+# The demo ships with the MiniLM weights in the local Hugging Face cache. Do
+# not let SentenceTransformer probe the network during startup (which can make
+# the UI look loaded while the first live turn is still blocked on retries).
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
 from sentence_transformers import SentenceTransformer
 
 MODEL_NAME = "all-MiniLM-L6-v2"
